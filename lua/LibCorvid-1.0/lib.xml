@@ -4,4 +4,6 @@
   <Script file="Bits.lua"/>
   <Script file="Crc32.lua"/>
   <Script file="ChaCha20.lua"/>
+  <Script file="ReedSolomon.lua"/>
+  <Script file="Qr10.lua"/>
 </Ui>
