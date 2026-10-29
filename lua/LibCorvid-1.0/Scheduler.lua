@@ -13,6 +13,7 @@ local REALTIME_BYTES = 134
 local IDLE_SECONDS = 1
 local BACKGROUND_SECONDS = 1
 local MESSAGE_OVERHEAD = 3
+local STATUS_BYTES = 32
 
 function Scheduler.new()
   return setmetatable({
@@ -22,6 +23,7 @@ function Scheduler.new()
     statusVersion = 0,
     shownStatusVersion = -1,
     bgNext = 1,
+    dropped = 0,
   }, Scheduler)
 end
 
@@ -35,8 +37,10 @@ function Scheduler:Register(channel, key)
 end
 
 function Scheduler:SetStatus(channel, body)
+  if #body > STATUS_BYTES then return false end
   self.channels[channel].status = body
   self.statusVersion = self.statusVersion + 1
+  return true
 end
 
 function Scheduler:fitsEmpty(channel, size)
@@ -108,6 +112,27 @@ local function advance(cursor, channel, pos, n)
   cursor.left = cursor.left - 1
 end
 
+local function fits(m, free)
+  return MESSAGE_OVERHEAD + #m.body <= free
+end
+
+function Scheduler:dropUnfit(free)
+  for class, q in pairs(self.queues) do
+    local kept = {}
+    for _, m in ipairs(q) do
+      if m.inflight or fits(m, free) then kept[#kept + 1] = m else self.dropped = self.dropped + 1 end
+    end
+    self.queues[class] = kept
+  end
+  for _, ch in pairs(self.channels) do
+    local kept = {}
+    for _, m in ipairs(ch.background) do
+      if fits(m, free) then kept[#kept + 1] = m else self.dropped = self.dropped + 1 end
+    end
+    if #kept < #ch.background then ch.background = kept end
+  end
+end
+
 function Scheduler:Compose(now)
   if self.composed then release(self.composed.messages) end
   local picked, shape, taken = {}, {}, {}
@@ -116,6 +141,7 @@ function Scheduler:Compose(now)
     shape[i] = { sizes = { #self.channels[channel].status } }
   end
   local left = Frame.free(shape)
+  self:dropUnfit(left)
 
   local function fill(class, budget)
     for _, m in ipairs(self.queues[class]) do
@@ -160,7 +186,9 @@ function Scheduler:Compose(now)
     end
     plan[i] = { channel = channel, key = ch.key, messages = messages }
   end
-  self.composed = { messages = taken, cursor = cursor, background = bgShown, statusVersion = self.statusVersion }
+  self.composed = {
+    messages = taken, cursor = cursor, background = bgShown, statusVersion = self.statusVersion, protected = self.cut,
+  }
   return plan
 end
 
@@ -168,7 +196,7 @@ function Scheduler:Shown(now, renders)
   local composed = self.composed
   if not composed then return end
   if self.shown and not self.shown.held then release(self.shown.messages) end
-  self.composed = nil
+  self.composed, self.cut = nil, nil
   composed.at, composed.renders = now, renders
   self.shown = composed
   self.shownStatusVersion = composed.statusVersion
@@ -203,7 +231,7 @@ function Scheduler:WantsFrame(now, renders)
   local shown = self.shown
   if not shown then return true end
   self:Tick(now, renders)
-  if not shown.held then return self:pending("realtime") end
+  if not shown.held then return not shown.protected and self:pending("realtime") end
   return self:pending("realtime") or self:pending("normal")
     or self.statusVersion ~= self.shownStatusVersion
     or now - shown.at >= IDLE_SECONDS
@@ -211,7 +239,7 @@ end
 
 function Scheduler:Preempted()
   local shown = self.shown
-  if not shown or shown.held then return end
+  if not shown or shown.held or shown.protected then return end
   release(shown.messages)
-  self.shown = nil
+  self.shown, self.cut = nil, true
 end

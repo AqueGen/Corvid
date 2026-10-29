@@ -81,9 +81,9 @@ describe("Scheduler", function()
   it("caps realtime bytes and keeps chat in every plan under a cast flood", function()
     local s = new()
     for i = 1, 10 do s:Send(WCT, "normal", CHAT, string.rep("c", 20)) end
-    local plans = run(s, 2, function(_, renders)
+    local plans = run(s, 2, function()
       s:Send(PS, "realtime", CAST, string.rep("x", 40))
-      if renders % 30 == 0 then s:Send(WCT, "normal", CHAT, string.rep("c", 20)) end
+      s:Send(WCT, "normal", CHAT, string.rep("c", 20))
     end)
     assert.is_true(#plans > 20)
     for _, p in ipairs(plans) do
@@ -92,6 +92,65 @@ describe("Scheduler", function()
       assert.is_true(bytes <= 134)
       assert.is_true(count(p.plan, CHAT) > 0)
     end
+  end)
+
+  it("keeps delivering realtime messages under a flood of one cast per render", function()
+    local s = new()
+    for i = 1, 10 do s:Send(WCT, "normal", CHAT, string.rep("c", 20)) end
+    local deliveries = {}
+    local plans = run(s, 2, function(now, renders)
+      s:Send(PS, "realtime", CAST, string.rep("x", 40))
+      s:Send(WCT, "normal", CHAT, string.rep("c", 20))
+      local before = #s.queues.realtime
+      s:Tick(now, renders)
+      if #s.queues.realtime < before then deliveries[#deliveries + 1] = now end
+    end)
+    for window = 0, 1.9, 0.1 do
+      local n = 0
+      for _, at in ipairs(deliveries) do
+        if at >= window and at < window + 0.1 then n = n + 1 end
+      end
+      assert.is_true(n > 0, "no delivery in window " .. window)
+    end
+    for _, p in ipairs(plans) do
+      assert.is_true(count(p.plan, CHAT) > 0)
+    end
+  end)
+
+  it("does not preempt a frame composed after a preemption", function()
+    local s = new()
+    s:Compose(0)
+    s:Shown(0, 0)
+    s:Send(PS, "realtime", CAST, "a")
+    assert.is_true(s:WantsFrame(STEP, 1))
+    s:Preempted()
+    s:Compose(STEP)
+    s:Shown(STEP, 1)
+    s:Send(PS, "realtime", CAST, "b")
+    assert.is_false(s:WantsFrame(2 * STEP, 2))
+    s:Preempted()
+    s:Tick(2 * STEP, 2)
+    assert.is_true(s:WantsFrame(5 * STEP, 5))
+    assert.same({ 0, CAST }, types(s:Compose(5 * STEP), PS))
+  end)
+
+  it("drops queued messages and background items that no longer fit an empty frame", function()
+    local s = Scheduler.new()
+    s:Register(WCT, "wct-key")
+    assert.is_true(s:Send(WCT, "normal", CHAT, string.rep("x", 230)))
+    assert.is_true(s:SetBackground(WCT, { { type = PAGE, body = string.rep("p", 230) }, { type = PAGE, body = "small" } }))
+    s:Register(PS, "ps-key")
+    s:Send(WCT, "normal", CHAT, "next")
+    local plan = s:Compose(0)
+    assert.same({ { type = 0, body = "" }, { type = CHAT, body = "next" }, { type = PAGE, body = "small" } }, segment(plan, WCT).messages)
+    assert.equals(2, s.dropped)
+  end)
+
+  it("refuses a status longer than 32 bytes and keeps the old one", function()
+    local s = new()
+    assert.is_true(s:SetStatus(WCT, string.rep("s", 32)))
+    assert.is_false(s:SetStatus(WCT, string.rep("t", 33)))
+    assert.equals(string.rep("s", 32), segment(s:Compose(0), WCT).messages[1].body)
   end)
 
   it("puts background on screen at least once per second while chat fills every frame", function()
