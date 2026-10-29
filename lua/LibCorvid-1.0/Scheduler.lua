@@ -11,7 +11,8 @@ local HOLD_RENDERS = 3
 local HOLD_SECONDS = 0.06
 local REALTIME_BYTES = 134
 local IDLE_SECONDS = 1
-local BACKGROUND_SECONDS = 1
+-- half of the 1 s guarantee, so compose wait + a cut frame + hold still land inside it
+local BACKGROUND_SECONDS = 0.5
 local MESSAGE_OVERHEAD = 3
 local STATUS_BYTES = 32
 
@@ -37,25 +38,27 @@ function Scheduler:Register(channel, key)
 end
 
 function Scheduler:SetStatus(channel, body)
-  if #body > STATUS_BYTES then return false end
+  if not self.channels[channel] or #body > STATUS_BYTES then return false end
   self.channels[channel].status = body
   self.statusVersion = self.statusVersion + 1
   return true
 end
 
-function Scheduler:fitsEmpty(channel, size)
+function Scheduler:statusFree()
   local shape = {}
-  for i, ch in ipairs(self.order) do
-    shape[i] = { sizes = { #self.channels[ch].status, ch == channel and size or nil } }
-  end
-  return Frame.free(shape) >= 0
+  for i, ch in ipairs(self.order) do shape[i] = { sizes = { #self.channels[ch].status } } end
+  return Frame.free(shape)
+end
+
+local function fits(m, free)
+  return MESSAGE_OVERHEAD + #m.body <= free
 end
 
 function Scheduler:Send(channel, class, type, body, replaceKey)
-  if not self.channels[channel] or not self:fitsEmpty(channel, #body) then return false end
-  if class == "realtime" and MESSAGE_OVERHEAD + #body > REALTIME_BYTES then return false end
-  local message = { channel = channel, type = type, body = body, replaceKey = replaceKey }
   local queue = self.queues[class]
+  local message = { channel = channel, type = type, body = body, replaceKey = replaceKey }
+  if not queue or not self.channels[channel] or not fits(message, self:statusFree()) then return false end
+  if class == "realtime" and not fits(message, REALTIME_BYTES) then return false end
   if replaceKey then
     for _, q in pairs(self.queues) do
       for i, m in ipairs(q) do
@@ -75,10 +78,12 @@ function Scheduler:Send(channel, class, type, body, replaceKey)
 end
 
 function Scheduler:SetBackground(channel, list)
-  for _, m in ipairs(list) do
-    if not self:fitsEmpty(channel, #m.body) then return false end
-  end
   local ch = self.channels[channel]
+  if not ch then return false end
+  local free = self:statusFree() - REALTIME_BYTES
+  for _, m in ipairs(list) do
+    if not fits(m, free) then return false end
+  end
   ch.background, ch.bgIdx = list, 1
   return true
 end
@@ -112,10 +117,6 @@ local function advance(cursor, channel, pos, n)
   cursor.left = cursor.left - 1
 end
 
-local function fits(m, free)
-  return MESSAGE_OVERHEAD + #m.body <= free
-end
-
 function Scheduler:dropUnfit(free)
   for class, q in pairs(self.queues) do
     local kept = {}
@@ -127,7 +128,7 @@ function Scheduler:dropUnfit(free)
   for _, ch in pairs(self.channels) do
     local kept = {}
     for _, m in ipairs(ch.background) do
-      if fits(m, free) then kept[#kept + 1] = m else self.dropped = self.dropped + 1 end
+      if fits(m, free - REALTIME_BYTES) then kept[#kept + 1] = m else self.dropped = self.dropped + 1 end
     end
     if #kept < #ch.background then ch.background = kept end
   end
@@ -135,12 +136,12 @@ end
 
 function Scheduler:Compose(now)
   if self.composed then release(self.composed.messages) end
-  local picked, shape, taken = {}, {}, {}
-  for i, channel in ipairs(self.order) do
+  if self.shown and not self.shown.held then self:cut() end
+  local picked, taken = {}, {}
+  for _, channel in ipairs(self.order) do
     picked[channel] = { realtime = {}, normal = {}, background = {} }
-    shape[i] = { sizes = { #self.channels[channel].status } }
   end
-  local left = Frame.free(shape)
+  local left = self:statusFree()
   self:dropUnfit(left)
 
   local function fill(class, budget)
@@ -187,7 +188,7 @@ function Scheduler:Compose(now)
     plan[i] = { channel = channel, key = ch.key, messages = messages }
   end
   self.composed = {
-    messages = taken, cursor = cursor, background = bgShown, statusVersion = self.statusVersion, protected = self.cut,
+    messages = taken, cursor = cursor, background = bgShown, statusVersion = self.statusVersion, protected = self.wasCut,
   }
   return plan
 end
@@ -195,12 +196,10 @@ end
 function Scheduler:Shown(now, renders)
   local composed = self.composed
   if not composed then return end
-  if self.shown and not self.shown.held then release(self.shown.messages) end
-  self.composed, self.cut = nil, nil
+  self.composed, self.wasCut = nil, nil
   composed.at, composed.renders = now, renders
   self.shown = composed
   self.shownStatusVersion = composed.statusVersion
-  if composed.background then self.lastBgAt = now end
 end
 
 function Scheduler:Tick(now, renders)
@@ -218,6 +217,7 @@ function Scheduler:Tick(now, renders)
   end
   self.bgNext = shown.cursor.next
   for channel, idx in pairs(shown.cursor.idx) do self.channels[channel].bgIdx = idx end
+  if shown.background then self.lastBgAt = now end
 end
 
 function Scheduler:pending(class)
@@ -237,9 +237,13 @@ function Scheduler:WantsFrame(now, renders)
     or now - shown.at >= IDLE_SECONDS
 end
 
+function Scheduler:cut()
+  release(self.shown.messages)
+  self.shown, self.wasCut = nil, true
+end
+
 function Scheduler:Preempted()
   local shown = self.shown
   if not shown or shown.held or shown.protected then return end
-  release(shown.messages)
-  self.shown, self.cut = nil, true
+  self:cut()
 end

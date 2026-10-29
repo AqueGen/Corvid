@@ -42,15 +42,30 @@ local function run(s, seconds, each)
     local now = renders * STEP
     each(now, renders)
     s:Tick(now, renders)
+    local last = plans[#plans]
+    if last and not last.heldAt and renders - last.renders >= 3 and now - last.at >= 0.06 then
+      last.heldAt = now
+    end
     if s:WantsFrame(now, renders) then
       s:Preempted()
       local plan = s:Compose(now)
       s:Shown(now, renders)
-      plans[#plans + 1] = { at = now, plan = plan }
+      plans[#plans + 1] = { at = now, renders = renders, plan = plan }
     end
     renders = renders + 1
   end
   return plans
+end
+
+local function backgroundGap(plans, seconds)
+  local last, gap = 0, 0
+  for _, p in ipairs(plans) do
+    if p.heldAt and count(p.plan, PAGE) > 0 then
+      gap = math.max(gap, p.heldAt - last)
+      last = p.heldAt
+    end
+  end
+  return math.max(gap, seconds - last)
 end
 
 describe("Scheduler", function()
@@ -96,24 +111,28 @@ describe("Scheduler", function()
 
   it("keeps delivering realtime messages under a flood of one cast per render", function()
     local s = new()
-    for i = 1, 10 do s:Send(WCT, "normal", CHAT, string.rep("c", 20)) end
-    local deliveries = {}
-    local plans = run(s, 2, function(now, renders)
-      s:Send(PS, "realtime", CAST, string.rep("x", 40))
+    local plans = run(s, 2, function(_, renders)
+      s:Send(PS, "realtime", CAST, string.format("%040d", renders))
       s:Send(WCT, "normal", CHAT, string.rep("c", 20))
-      local before = #s.queues.realtime
-      s:Tick(now, renders)
-      if #s.queues.realtime < before then deliveries[#deliveries + 1] = now end
     end)
-    for window = 0, 1.9, 0.1 do
-      local n = 0
-      for _, at in ipairs(deliveries) do
-        if at >= window and at < window + 0.1 then n = n + 1 end
-      end
-      assert.is_true(n > 0, "no delivery in window " .. window)
-    end
+    local delivered = {}
     for _, p in ipairs(plans) do
       assert.is_true(count(p.plan, CHAT) > 0)
+      for _, m in ipairs(segment(p.plan, PS).messages) do
+        assert.is_nil(delivered[m.body], "delivered cast resent")
+      end
+      if p.heldAt then
+        for _, m in ipairs(segment(p.plan, PS).messages) do
+          if m.type == CAST then delivered[m.body] = true end
+        end
+      end
+    end
+    for window = 0, 1.8, 0.1 do
+      local n = 0
+      for _, p in ipairs(plans) do
+        if p.heldAt and p.heldAt >= window and p.heldAt < window + 0.1 and count(p.plan, CAST) > 0 then n = n + 1 end
+      end
+      assert.is_true(n > 0, "no delivery in window " .. window)
     end
   end)
 
@@ -138,12 +157,47 @@ describe("Scheduler", function()
     local s = Scheduler.new()
     s:Register(WCT, "wct-key")
     assert.is_true(s:Send(WCT, "normal", CHAT, string.rep("x", 230)))
-    assert.is_true(s:SetBackground(WCT, { { type = PAGE, body = string.rep("p", 230) }, { type = PAGE, body = "small" } }))
+    assert.is_true(s:SetBackground(WCT, { { type = PAGE, body = string.rep("p", 100) }, { type = PAGE, body = "small" } }))
     s:Register(PS, "ps-key")
     s:Send(WCT, "normal", CHAT, "next")
     local plan = s:Compose(0)
     assert.same({ { type = 0, body = "" }, { type = CHAT, body = "next" }, { type = PAGE, body = "small" } }, segment(plan, WCT).messages)
     assert.equals(2, s.dropped)
+  end)
+
+  it("refuses a background item that cannot sit beside a full realtime share", function()
+    local s = new()
+    assert.is_false(s:SetBackground(PS, { { type = PAGE, body = string.rep("p", 93) } }))
+    assert.is_true(s:SetBackground(PS, { { type = PAGE, body = string.rep("p", 92) } }))
+  end)
+
+  it("delivers background at least once in every second under a cast and chat flood", function()
+    local s = new()
+    s:SetBackground(PS, { { type = PAGE, body = string.rep("a", 30) }, { type = PAGE, body = string.rep("b", 30) } })
+    local plans = run(s, 10, function(_, renders)
+      s:Send(PS, "realtime", CAST, string.format("%040d", renders))
+      s:Send(WCT, "normal", CHAT, string.rep("c", 20))
+    end)
+    assert.is_true(backgroundGap(plans, 10) <= 1)
+  end)
+
+  it("keeps order when Compose runs over an unheld frame without Preempted", function()
+    local s = new()
+    s:Send(WCT, "normal", CHAT, "a")
+    s:Compose(0)
+    s:Shown(0, 0)
+    s:Send(WCT, "normal", CHAT, "b")
+    local plan = s:Compose(STEP)
+    s:Shown(STEP, 1)
+    assert.same({ { type = 0, body = "" }, { type = CHAT, body = "a" }, { type = CHAT, body = "b" } }, segment(plan, WCT).messages)
+  end)
+
+  it("returns false for unregistered channels and unknown classes", function()
+    local s = new()
+    assert.is_false(s:SetStatus(9, "x"))
+    assert.is_false(s:SetBackground(9, {}))
+    assert.is_false(s:Send(9, "normal", CHAT, "x"))
+    assert.is_false(s:Send(WCT, "urgent", CHAT, "x"))
   end)
 
   it("refuses a status longer than 32 bytes and keeps the old one", function()
@@ -159,21 +213,19 @@ describe("Scheduler", function()
     local plans = run(s, 10, function()
       s:Send(WCT, "normal", CHAT, string.rep("c", 73))
     end)
-    local last, pages = 0, 0
+    local pages = 0
     for _, p in ipairs(plans) do
       assert.is_true(count(p.plan, CHAT) > 0)
-      if count(p.plan, PAGE) > 0 then
-        assert.is_true(p.at - last <= 1 + 4 * STEP)
-        last, pages = p.at, pages + 1
-      end
+      if count(p.plan, PAGE) > 0 then pages = pages + 1 end
     end
-    assert.is_true(pages >= 9)
+    assert.is_true(backgroundGap(plans, 10) <= 1)
     assert.is_true(pages < #plans / 2)
   end)
 
   it("serves background round-robin once each frame is held", function()
     local s = new()
-    s:SetBackground(PS, { { type = PAGE, body = string.rep("a", 120) }, { type = PAGE, body = string.rep("b", 120) } })
+    s:SetBackground(PS, { { type = PAGE, body = string.rep("a", 90) }, { type = PAGE, body = string.rep("b", 90) } })
+    s:Send(WCT, "normal", CHAT, string.rep("c", 120))
     local first = segment(s:Compose(0), PS).messages[2].body
     s:Shown(0, 0)
     s:Tick(0.1, 5)
