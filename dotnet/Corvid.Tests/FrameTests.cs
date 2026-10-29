@@ -92,6 +92,59 @@ public class FrameTests
         Assert.Equal(OpenStatus.NoSegment, frame.Open(2, key).Status);
     }
 
+    private static byte[] Raw(ChannelKey key, byte[] cipher, byte count = 1)
+    {
+        var frame = new byte[FrameWriter.Size];
+        frame[0] = 0xC7;
+        frame[1] = 0x1D;
+        frame[2] = 1;
+        frame[16] = count;
+        frame[17] = 1;
+        frame[18] = key.KeyId;
+        frame[19] = (byte)cipher.Length;
+        frame[20] = (byte)(cipher.Length >> 8);
+        cipher.CopyTo(frame, 21);
+        return frame;
+    }
+
+    private static byte[] Seal(ChannelKey key, byte[] body)
+    {
+        var crc = Crc32.Compute(body);
+        var plain = body.Concat(BitConverter.GetBytes(crc)).ToArray();
+        ChaCha20.Xor(key.Bytes, new byte[12], 0, plain);
+        return plain;
+    }
+
+    [Fact]
+    public void OpenRejectsCipherShorterThanCrc()
+    {
+        var key = ChannelKey.Generate();
+        Assert.True(Frame.TryParse(Raw(key, [1, 2, 3]), out var frame));
+        Assert.Equal(OpenStatus.Malformed, frame.Open(1, key).Status);
+    }
+
+    [Theory]
+    [InlineData("0005000102")]
+    [InlineData("00010001FF")]
+    [InlineData("0000")]
+    public void OpenRejectsMessageLengthsThatMissTheCrc(string bodyHex)
+    {
+        var key = ChannelKey.Generate();
+        Assert.True(Frame.TryParse(Raw(key, Seal(key, Convert.FromHexString(bodyHex))), out var frame));
+        Assert.Equal(OpenStatus.Malformed, frame.Open(1, key).Status);
+    }
+
+    [Fact]
+    public void TryParseWalksIntoPaddingAndOpenStillWorks()
+    {
+        var key = ChannelKey.Generate();
+        Assert.True(Frame.TryParse(Raw(key, Seal(key, [0, 1, 0, 9]), 5), out var frame));
+        Assert.Equal(5, frame.Segments.Count);
+        var result = frame.Open(1, key);
+        Assert.Equal(OpenStatus.Ok, result.Status);
+        Assert.Equal(new byte[] { 9 }, Assert.Single(result.Messages).Body);
+    }
+
     [Fact]
     public void WriteThrowsWhenOverSize()
     {
