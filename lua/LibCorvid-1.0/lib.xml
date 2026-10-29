@@ -7,4 +7,5 @@
   <Script file="ReedSolomon.lua"/>
   <Script file="Qr10.lua"/>
   <Script file="Frame.lua"/>
+  <Script file="Scheduler.lua"/>
 </Ui>
