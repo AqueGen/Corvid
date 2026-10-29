@@ -6,4 +6,5 @@
   <Script file="ChaCha20.lua"/>
   <Script file="ReedSolomon.lua"/>
   <Script file="Qr10.lua"/>
+  <Script file="Frame.lua"/>
 </Ui>
