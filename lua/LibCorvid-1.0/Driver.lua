@@ -21,6 +21,7 @@ if lib.locked == nil then lib.locked = true end
 
 local frame = Mark.frame
 local job
+local restarted = false
 local resumeStart = 0
 local sinceScaleCheck = 0
 
@@ -53,7 +54,11 @@ frame:SetScript("OnUpdate", function(_, elapsed)
   s:Tick(now, renders)
   if not job and s:WantsFrame(now, renders) then
     s:Preempted()
-    job = { co = coroutine.create(render), plan = s:Compose(now), buffer = Mark.back(), ms = 0, kb = collectgarbage("count") }
+    job = {
+      co = coroutine.create(render), plan = s:Compose(now), buffer = Mark.back(), ms = 0, kb = collectgarbage("count"),
+      restartable = not restarted,
+    }
+    restarted = false
   end
   if not job then return end
   resumeStart = debugprofilestop()
@@ -93,7 +98,12 @@ local function moveTo(x, y)
 end
 Mark.onMoved = moveTo
 
+local function validPos(p)
+  return type(p) == "table" and type(p.x) == "number" and type(p.y) == "number" and type(p.t) == "number"
+end
+
 function lib:Register(channel, keyHex, db)
+  if type(channel) ~= "number" or channel % 1 ~= 0 or channel < 0 or channel > 255 then return nil, "bad channel" end
   local key = type(keyHex) == "string" and #keyHex == KEY_HEX_LENGTH and Bits.hexToBytes(keyHex)
   if not key then return nil, "bad key" end
   local ok, err = lib.scheduler:Register(channel, key)
@@ -102,8 +112,12 @@ function lib:Register(channel, keyHex, db)
     or Bits.u32le(GetServerTime()) .. Bits.u16le(math.random(0, 65535)) .. Bits.u16le(math.random(0, 65535))
   if db then
     lib.dbs[#lib.dbs + 1] = db
-    local p = db.corvidPos
-    if p and p.t and (not lib.pos.t or p.t > lib.pos.t) then lib.pos = { x = p.x, y = p.y, t = p.t } end
+    local p = validPos(db.corvidPos) and db.corvidPos
+    if p and (not lib.pos.t or p.t > lib.pos.t) then
+      lib.pos = { x = p.x, y = p.y, t = p.t }
+    elseif lib.pos.t and (not p or p.t < lib.pos.t) then
+      db.corvidPos = { x = lib.pos.x, y = lib.pos.y, t = lib.pos.t }
+    end
   end
   lib.wanted[channel] = true
   Mark.layout()
@@ -118,7 +132,8 @@ end
 
 function lib:Send(channel, class, type, body, replaceKey)
   local ok = lib.scheduler:Send(channel, class, type, body, replaceKey)
-  if ok and class == "realtime" then job = nil end
+  -- one restart per job: a realtime flood would otherwise restart every job and starve the mark
+  if ok and class == "realtime" and job and job.restartable then job, restarted = nil, true end
   return ok
 end
 

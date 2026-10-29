@@ -18,8 +18,8 @@ function Region:ClearAllPoints() self.point = nil end
 function Region:SetPoint(point, rel, relPoint, x, y) self.point = { point, rel, relPoint, x or 0, y or 0 } end
 function Region:SetAllPoints() self.point = { "TOPLEFT", self.parent, "TOPLEFT", 0, 0 } end
 function Region:GetPoint() return unpack(self.point) end
-function Region:GetLeft() return self.point[2]:GetLeft() + self.point[4] end
-function Region:GetTop() return self.point[2]:GetTop() + self.point[5] end
+function Region:GetLeft() return self.point and self.point[2]:GetLeft() + self.point[4] end
+function Region:GetTop() return self.point and self.point[2]:GetTop() + self.point[5] end
 function Region:SetScale(scale) self.scale = scale end
 function Region:GetScale() return self.scale end
 function Region:GetEffectiveScale() return self.scale * (self.parent and self.parent:GetEffectiveScale() or 1) end
@@ -30,6 +30,7 @@ function Region:SetFrameLevel(level) self.level = level end
 function Region:GetFrameLevel() return self.level end
 function Region:SetMovable(movable) self.movable = movable end
 function Region:SetClampedToScreen(clamped) self.clamped = clamped end
+function Region:SetDontSavePosition(dont) self.dontSavePosition = dont end
 function Region:RegisterForDrag(button) self.dragButton = button end
 function Region:EnableMouse(enabled) self.mouse = enabled end
 function Region:StartMoving() self.moving = true end

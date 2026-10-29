@@ -239,6 +239,68 @@ describe("Driver", function()
     for i = 1, 6 do assert.is_true(math.abs(got[i] - want[i]) < 1e-9, "coordinate " .. i) end
   end)
 
+  it("keeps showing frames under a realtime message every update", function()
+    local lib = fresh()
+    assert.is_true(lib:Register(1, KEY_HEX, {}))
+    stub.msStep = 0.003
+    lib:Send(1, "realtime", 5, "x")
+    update(lib, 1)
+    assert.are.equal(0, lib:Stats().frames)
+    local windows, last = {}, 0
+    for i = 1, 120 do
+      lib:Send(1, "realtime", 5, "x")
+      update(lib, 1)
+      if i % 12 == 0 then
+        local frames = lib:Stats().frames
+        windows[#windows + 1] = frames - last
+        last = frames
+      end
+    end
+    for i, n in ipairs(windows) do assert.is_true(n >= 1, "window " .. i .. " " .. table.concat(windows, ",")) end
+  end)
+
+  it("returns no reference points before the mark has a position", function()
+    stub.reset()
+    _G.LibStub = nil
+    local lib = loadCopy(1)
+    assert.is_nil(lib:ReferencePoints())
+    assert.is_true(lib.Mark.frame.dontSavePosition)
+  end)
+
+  it("refuses a channel outside 0..255", function()
+    local lib = fresh()
+    for _, channel in ipairs({ -1, 256, 1.5, "1" }) do
+      local ok, err = lib:Register(channel, KEY_HEX, {})
+      assert.is_nil(ok)
+      assert.are.equal("bad channel", err)
+    end
+    assert.is_true(lib:Register(0, KEY_HEX, {}))
+    assert.is_true(lib:Register(255, KEY_HEX, {}))
+  end)
+
+  it("ignores a corrupt stored position and still registers", function()
+    local lib = fresh()
+    assert.is_true(lib:Register(1, KEY_HEX, { corvidPos = { x = 300, y = -200, t = 20 } }))
+    for i, bad in ipairs({ { x = "1", y = 2, t = 30 }, { x = 1, y = 2 }, { x = 1, t = 40 }, "junk" }) do
+      local channel = 10 + i
+      assert.is_true(lib:Register(channel, KEY_HEX, { corvidPos = bad }))
+      assert.is_true(lib.wanted[channel])
+    end
+    local _, _, _, x, y = lib.Mark.frame:GetPoint()
+    assert.is_true(math.abs(x - 300) <= pixel())
+    assert.is_true(math.abs(y + 200) <= pixel())
+  end)
+
+  it("writes the newer position into a db registered later", function()
+    local lib = fresh()
+    assert.is_true(lib:Register(1, KEY_HEX, { corvidPos = { x = 300, y = -200, t = 20 } }))
+    local older, empty = { corvidPos = { x = 100, y = -50, t = 10 } }, {}
+    assert.is_true(lib:Register(2, KEY_HEX, older))
+    assert.is_true(lib:Register(3, KEY_HEX, empty))
+    assert.are.same({ x = 300, y = -200, t = 20 }, older.corvidPos)
+    assert.are.same({ x = 300, y = -200, t = 20 }, empty.corvidPos)
+  end)
+
   it("hides the mark while no channel is wanted", function()
     local lib = fresh()
     assert.is_true(lib:Register(1, KEY_HEX, {}))

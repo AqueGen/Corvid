@@ -19,6 +19,7 @@ Mark.frame = frame
 frame:SetFrameStrata("TOOLTIP")
 frame:SetFrameLevel(10000)
 frame:SetMovable(true)
+frame:SetDontSavePosition(true)
 frame:SetClampedToScreen(true)
 frame:RegisterForDrag("LeftButton")
 
@@ -117,6 +118,7 @@ end
 function Mark.referencePoints()
   local m = PIXELS * pixel()
   local left, top = frame:GetLeft(), frame:GetTop()
+  if not left or not top then return nil end
   return left + NEAR * m, top - NEAR * m, left + FAR * m, top - NEAR * m, left + NEAR * m, top - FAR * m
 end
 
