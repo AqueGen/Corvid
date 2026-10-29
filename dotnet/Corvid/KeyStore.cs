@@ -14,7 +14,7 @@ public static class KeyStore
                 return ChannelKey.FromHex(Convert.ToHexStringLower(plain));
             }
         }
-        catch (Exception e) when (e is FormatException or CryptographicException or IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is FormatException or CryptographicException)
         {
         }
 

@@ -43,4 +43,17 @@ public class KeyTests : IDisposable
         Assert.Equal("local _, ns = ...\nns.corvidKey = \"" + key.ToHex() + "\"\n", Encoding.UTF8.GetString(bytes));
         Assert.NotEqual(0xEF, bytes[0]);
     }
+
+    [Fact]
+    public void LoadOrCreate_DoesNotOverwriteWhenFileIsLocked()
+    {
+        var path = Path.Combine(_dir, "key.dat");
+        KeyStore.LoadOrCreate(path);
+        var before = File.ReadAllText(path);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Throws<IOException>(() => KeyStore.LoadOrCreate(path));
+
+        Assert.Equal(before, File.ReadAllText(path));
+    }
 }

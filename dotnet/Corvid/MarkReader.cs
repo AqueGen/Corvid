@@ -10,6 +10,8 @@ public sealed class MarkReader(IScreenSource source, MarkReaderOptions options)
     PixelRect? _lastLocked;
     long _lastValidMs;
     long _nextProbeMs;
+    long _nextSearchMs;
+    PixelRect? _client;
     int _failedSearches;
     PixelRect _prevRect;
     Bgra? _prevCapture;
@@ -24,8 +26,13 @@ public sealed class MarkReader(IScreenSource source, MarkReaderOptions options)
     {
         if (!source.TryGetClient(out var client))
         {
-            Unlock();
-            return (null, SearchDelay());
+            Forget();
+            return (null, SearchDelay(nowMs));
+        }
+        if (_client != client)
+        {
+            Forget();
+            _client = client;
         }
 
         if (_locked is { } rect)
@@ -39,32 +46,74 @@ public sealed class MarkReader(IScreenSource source, MarkReaderOptions options)
             {
                 return (null, options.LockedEveryMs);
             }
-            Unlock();
+            _lastLocked = rect;
+            _locked = null;
             _nextProbeMs = nowMs + options.RelockProbeMs;
         }
 
-        var probing = _lastLocked is not null && nowMs >= _nextProbeMs;
-        if (probing) _nextProbeMs = nowMs + options.RelockProbeMs;
-        var found = Read(probing ? _lastLocked!.Value : client, client);
-        if (found is null) return (null, SearchDelay());
+        if (_lastLocked is { } last && nowMs >= _nextProbeMs)
+        {
+            _nextProbeMs = nowMs + options.RelockProbeMs;
+            if (Read(last, client) is { } probed)
+            {
+                return (Accept(probed, client, nowMs), options.LockedEveryMs);
+            }
+        }
 
-        _lastValidMs = nowMs;
-        _failedSearches = 0;
-        Lock(client);
-        return (found, options.LockedEveryMs);
+        if (nowMs >= _nextSearchMs)
+        {
+            if (Read(client, client) is { } found)
+            {
+                return (Accept(found, client, nowMs), options.LockedEveryMs);
+            }
+            return (null, SearchDelay(nowMs));
+        }
+        return (null, Remaining(nowMs));
     }
 
-    int SearchDelay() => options.SearchDelayMs(_failedSearches++);
-
-    void Unlock()
+    MarkRead Accept(MarkRead read, PixelRect client, long nowMs)
     {
-        _lastLocked = _locked ?? _lastLocked;
+        _lastValidMs = nowMs;
+        _failedSearches = 0;
+        _nextSearchMs = 0;
+        Lock(client);
+        return read;
+    }
+
+    int SearchDelay(long nowMs)
+    {
+        var delay = options.SearchDelayMs(_failedSearches++);
+        _nextSearchMs = nowMs + delay;
+        return Remaining(nowMs);
+    }
+
+    int Remaining(long nowMs)
+    {
+        var wait = _nextSearchMs - nowMs;
+        if (_lastLocked is not null) wait = Math.Min(wait, _nextProbeMs - nowMs);
+        return (int)Math.Max(0, wait);
+    }
+
+    void Forget()
+    {
         _locked = null;
+        _lastLocked = null;
+        _prevCapture = null;
+        _failedSearches = 0;
+        _nextSearchMs = 0;
     }
 
     MarkRead? Read(PixelRect rect, PixelRect client)
     {
-        var capture = source.Capture(rect);
+        Bgra? capture;
+        try
+        {
+            capture = source.Capture(rect);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
         if (capture is null) return null;
         if (rect == _prevRect && _prevCapture is { } prev && prev.Pixels.AsSpan().SequenceEqual(capture.Pixels))
         {

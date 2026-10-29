@@ -10,22 +10,27 @@ public class MarkReaderTests
 
     sealed class FakeSource(int originX, int originY) : IScreenSource
     {
+        public int OriginX { get; set; } = originX;
+        public bool NullCapture { get; set; }
+        public bool ThrowOnCapture { get; set; }
         public Bgra Screen { get; set; } = Blank();
         public bool HasClient { get; set; } = true;
         public List<PixelRect> Captures { get; } = [];
 
         public bool TryGetClient(out PixelRect client)
         {
-            client = new PixelRect(originX, originY, W, H);
+            client = new PixelRect(OriginX, originY, W, H);
             return HasClient;
         }
 
         public Bgra? Capture(PixelRect rect)
         {
             Captures.Add(rect);
+            if (ThrowOnCapture) throw new InvalidOperationException();
+            if (NullCapture) return null;
             var pixels = new byte[rect.Width * rect.Height * 4];
             for (var y = 0; y < rect.Height; y++)
-                Array.Copy(Screen.Pixels, ((rect.Y - originY + y) * W + rect.X - originX) * 4, pixels, y * rect.Width * 4, rect.Width * 4);
+                Array.Copy(Screen.Pixels, ((rect.Y - originY + y) * W + rect.X - OriginX) * 4, pixels, y * rect.Width * 4, rect.Width * 4);
             return new Bgra(pixels, rect.Width, rect.Height);
         }
     }
@@ -179,5 +184,120 @@ public class MarkReaderTests
         var (read, delay) = Reader(source).Step(0);
         Assert.Null(read);
         Assert.Equal(200, delay);
+    }
+
+    static MarkReader SlowReader(FakeSource source, int searchMs) =>
+        new(source, new MarkReaderOptions(100, _ => searchMs));
+
+    [Fact]
+    public void MovedMarkIsFoundBySearchEvenWhenSearchDelayExceedsProbeInterval()
+    {
+        var source = new FakeSource(0, 0);
+        Paste(source.Screen, Mark(1), 300, 200);
+        var reader = SlowReader(source, 2000);
+        Assert.NotNull(reader.Step(0).Read);
+
+        source.Screen = Blank();
+        Assert.Null(reader.Step(2000).Read);
+        Assert.False(reader.Locked);
+        Paste(source.Screen, Mark(2), 800, 400);
+        MarkRead? found = null;
+        for (var t = 4000; found is null && t <= 12000; t += 2000) found = reader.Step(t).Read;
+
+        Assert.Equal(2u, found!.Frame.Counter);
+        Assert.InRange(found.Points.TopLeft.X, 814, 816);
+        Assert.True(reader.Locked);
+    }
+
+    [Fact]
+    public void ClientRectChangeClearsRememberedRect()
+    {
+        var source = new FakeSource(0, 0);
+        Paste(source.Screen, Mark(1), 300, 200);
+        var reader = Reader(source);
+        reader.Step(0);
+        reader.Step(100);
+        var oldRect = source.Captures[^1];
+
+        source.OriginX = 50;
+        source.Captures.Clear();
+        var read = reader.Step(200).Read;
+
+        Assert.Equal(new PixelRect(50, 0, W, H), source.Captures[0]);
+        Assert.DoesNotContain(oldRect, source.Captures);
+        Assert.Equal(1u, read!.Frame.Counter);
+        Assert.InRange(read.Points.TopLeft.X, 314, 316);
+    }
+
+    [Fact]
+    public void ClientThatDisappearsAndReturnsIsSearchedAgain()
+    {
+        var source = new FakeSource(0, 0);
+        Paste(source.Screen, Mark(1), 300, 200);
+        var reader = Reader(source);
+        reader.Step(0);
+        reader.Step(100);
+
+        source.HasClient = false;
+        source.Captures.Clear();
+        var gone = reader.Step(200);
+        Assert.Null(gone.Read);
+        Assert.False(reader.Locked);
+        Assert.Empty(source.Captures);
+
+        source.HasClient = true;
+        Assert.NotNull(reader.Step(1000).Read);
+        Assert.Equal(new PixelRect(0, 0, W, H), source.Captures[0]);
+        Assert.True(reader.Locked);
+    }
+
+    [Fact]
+    public void NextDelayCoversLockedFailureAndProbeSteps()
+    {
+        var source = new FakeSource(0, 0);
+        Paste(source.Screen, Mark(1), 300, 200);
+        var reader = SlowReader(source, 5000);
+        reader.Step(0);
+
+        source.Screen = Blank();
+        Assert.Equal(100, reader.Step(100).NextDelayMs);
+        for (var t = 200; t <= 1400; t += 100) reader.Step(t);
+        Assert.Equal(500, reader.Step(1500).NextDelayMs);
+        Assert.Equal(500, reader.Step(2000).NextDelayMs);
+        Assert.Equal(500, reader.Step(2500).NextDelayMs);
+    }
+
+    [Fact]
+    public void FailedAndThrowingCaptureCountAsFailedReads()
+    {
+        var source = new FakeSource(0, 0);
+        Paste(source.Screen, Mark(1), 300, 200);
+        var reader = Reader(source);
+
+        source.NullCapture = true;
+        Assert.Equal((null, 200), reader.Step(0));
+        source.NullCapture = false;
+        source.ThrowOnCapture = true;
+        Assert.Equal((null, 400), reader.Step(1000));
+        Assert.False(reader.Locked);
+
+        source.ThrowOnCapture = false;
+        Assert.NotNull(reader.Step(3000).Read);
+        source.ThrowOnCapture = true;
+        Assert.Null(reader.Step(3100).Read);
+        Assert.True(reader.Locked);
+    }
+
+    [Fact]
+    public void FrozenCaptureKeepsTheLockAndReturnsTheSameRead()
+    {
+        var source = new FakeSource(0, 0);
+        Paste(source.Screen, Mark(1), 300, 200);
+        var reader = Reader(source);
+        reader.Step(0);
+        var first = reader.Step(100).Read;
+
+        for (var t = 200; t <= 10000; t += 200) Assert.Same(first, reader.Step(t).Read);
+        Assert.True(reader.Locked);
     }
 }
