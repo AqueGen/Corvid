@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Corvid.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
   </ItemGroup>

@@ -227,6 +227,26 @@ public class MarkReaderTests
     }
 
     [Fact]
+    public void AlternatingProbeAndSearchCapturesKeepTheCompareBuffer()
+    {
+        var source = new FakeSource(0, 0) { ReuseBuffer = true };
+        Paste(source.Image, Mark(1), 300, 200);
+        var reader = Reader(source);
+        Assert.NotNull(reader.Step(0).Read);
+        Assert.Equal(1, reader.CompareBufferAllocations);
+
+        source.Image = Blank();
+        for (var t = 100; t <= 1500; t += 100) reader.Step(t);
+        Assert.False(reader.Locked);
+        source.Captures.Clear();
+        for (var t = 1600; t <= 8000; t += 100) reader.Step(t);
+
+        Assert.Contains(source.Captures, r => r.Width == W);
+        Assert.Contains(source.Captures, r => r.Width < W);
+        Assert.Equal(1, reader.CompareBufferAllocations);
+    }
+
+    [Fact]
     public void MissingClientReturnsNothing()
     {
         var source = new FakeSource(0, 0) { HasClient = false };
