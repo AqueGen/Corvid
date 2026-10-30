@@ -14,7 +14,11 @@ public sealed class MarkReader(ICaptureSource source, MarkReaderOptions options)
     PixelRect? _client;
     int _failedSearches;
     PixelRect _prevRect;
-    Bgra? _prevCapture;
+    byte[] _prevPixels = [];
+    int _prevLength;
+    bool _hasPrev;
+
+    internal int CompareBufferAllocations { get; private set; }
     MarkRead? _prevRead;
     PixelRect _prevMark;
 
@@ -98,7 +102,7 @@ public sealed class MarkReader(ICaptureSource source, MarkReaderOptions options)
     {
         _locked = null;
         _lastLocked = null;
-        _prevCapture = null;
+        _hasPrev = false;
         _failedSearches = 0;
         _nextSearchMs = 0;
     }
@@ -115,14 +119,21 @@ public sealed class MarkReader(ICaptureSource source, MarkReaderOptions options)
             return null;
         }
         if (capture is null) return null;
-        if (rect == _prevRect && _prevCapture is { } prev && prev.Pixels.AsSpan().SequenceEqual(capture.Pixels))
+        if (_hasPrev && rect == _prevRect && _prevPixels.AsSpan(0, _prevLength).SequenceEqual(capture.Pixels))
         {
             return _prevRead;
         }
 
         DecodeCount++;
         _prevRect = rect;
-        _prevCapture = capture;
+        if (_prevPixels.Length < capture.Pixels.Length)
+        {
+            _prevPixels = new byte[capture.Pixels.Length];
+            CompareBufferAllocations++;
+        }
+        capture.Pixels.CopyTo(_prevPixels, 0);
+        _prevLength = capture.Pixels.Length;
+        _hasPrev = true;
         _prevRead = null;
         foreach (var (bytes, p) in QrPicture.Decode(capture))
         {
