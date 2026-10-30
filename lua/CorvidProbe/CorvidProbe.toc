@@ -1,0 +1,10 @@
+## Interface: 120100, 120105
+## Title: Corvid Probe
+## Notes: Test addon for the Corvid library: draws one fixed test message.
+## Author: AqueGen
+## Version: 0.1.0
+## SavedVariables: CorvidProbeDB
+
+Libs\LibCorvid-1.0\lib.xml
+CorvidKey.lua
+Probe.lua

@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/dotnet/">
+    <Project Path="dotnet/Corvid/Corvid.csproj" />
+    <Project Path="dotnet/Corvid.Tests/Corvid.Tests.csproj" />
+  </Folder>
+</Solution>

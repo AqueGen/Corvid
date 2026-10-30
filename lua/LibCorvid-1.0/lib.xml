@@ -1,0 +1,13 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Script file="LibStub.lua"/>
+  <Script file="Core.lua"/>
+  <Script file="Bits.lua"/>
+  <Script file="Crc32.lua"/>
+  <Script file="ChaCha20.lua"/>
+  <Script file="ReedSolomon.lua"/>
+  <Script file="Qr10.lua"/>
+  <Script file="Frame.lua"/>
+  <Script file="Scheduler.lua"/>
+  <Script file="Mark.lua"/>
+  <Script file="Driver.lua"/>
+</Ui>
