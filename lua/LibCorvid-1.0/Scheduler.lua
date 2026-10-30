@@ -16,6 +16,7 @@ local BACKGROUND_SECONDS = 0.5
 local MESSAGE_OVERHEAD = 3
 local STATUS_BYTES = 32
 local PENDING_CAP = 64
+local HINT_CHARS = 120
 
 function Scheduler.new()
   return setmetatable({
@@ -42,6 +43,12 @@ function Scheduler:SetStatus(channel, body)
   if not self.channels[channel] or type(body) ~= "string" or #body > STATUS_BYTES then return false end
   self.channels[channel].status = body
   self.statusVersion = self.statusVersion + 1
+  return true
+end
+
+function Scheduler:SetHint(channel, text)
+  if not self.channels[channel] or (text ~= nil and (type(text) ~= "string" or #text > HINT_CHARS)) then return false end
+  self.channels[channel].hint = text
   return true
 end
 

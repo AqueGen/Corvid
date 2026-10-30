@@ -129,6 +129,10 @@ function lib:SetStatus(channel, body)
   return lib.scheduler:SetStatus(channel, body)
 end
 
+function lib:SetHint(channel, text)
+  return lib.scheduler:SetHint(channel, text)
+end
+
 function lib:Send(channel, class, msgType, body, replaceKey)
   local ok = lib.scheduler:Send(channel, class, msgType, body, replaceKey)
   -- one restart per job: a realtime flood would otherwise restart every job and starve the mark

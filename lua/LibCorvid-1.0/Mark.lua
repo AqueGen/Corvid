@@ -130,14 +130,32 @@ local function stopMoving()
 end
 
 function Mark.updateMouse()
-  local free = not lib.locked or IsAltKeyDown()
-  frame:EnableMouse(free)
+  local free = not lib.locked or not not IsAltKeyDown()
+  frame:EnableMouse(true)
+  frame:SetMouseClickEnabled(free)
+  frame:SetMouseMotionEnabled(true)
   if not free then stopMoving() end
 end
+
+frame:SetScript("OnEnter", function()
+  if frame.moving then return end
+  GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+  GameTooltip:AddLine("Screen mark")
+  GameTooltip:AddLine("Alt + drag: move", 1, 1, 1)
+  local s = lib.scheduler
+  for _, channel in ipairs(s.order) do
+    local hint = s.channels[channel].hint
+    if hint then GameTooltip:AddLine(hint, 1, 1, 1, true) end
+  end
+  GameTooltip:Show()
+end)
+
+frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 frame:SetScript("OnDragStart", function()
   if not lib.locked or IsAltKeyDown() then
     frame.moving = true
+    GameTooltip:Hide()
     frame:StartMoving()
   end
 end)
