@@ -18,7 +18,7 @@ local function loadCopy(minor)
     local src = read(dir .. name)
     if name == "Core.lua" then
       local n
-      src, n = src:gsub('NewLibrary%("LibCorvid%-1%.0", 1%)', 'NewLibrary("LibCorvid-1.0", ' .. minor .. ')')
+      src, n = src:gsub('NewLibrary%("LibCorvid%-1%.0", %d+%)', 'NewLibrary("LibCorvid-1.0", ' .. minor .. ')')
       assert(n == 1)
     end
     assert(loadstring(src, name))()
@@ -148,6 +148,22 @@ describe("Driver", function()
     assert.is_true(lib:SetStatus(1, "\2"))
     update(lib, 10)
     assert.are.same(expectedMatrix(lib, 0, { { type = 0, body = "\2" } }), drawnMatrix(frontBuffer(lib)))
+  end)
+
+  it("upgrades an old copy without SetHint in place before any Register", function()
+    local lib = fresh()
+    lib.SetHint, lib.Scheduler.SetHint = nil, nil
+    lib.Mark.frame:SetScript("OnEnter", nil)
+    lib.Mark.frame:SetScript("OnLeave", nil)
+    assert.are.equal(lib, loadCopy(2))
+    assert.is_function(lib.SetHint)
+    assert.is_true(lib:Register(3, KEY_HEX, {}))
+    assert.is_true(lib:SetHint(3, "three"))
+    local mark = lib.Mark.frame
+    mark:GetScript("OnEnter")(mark)
+    assert.are.same({ "Screen mark", "Alt + drag: move", "three" }, GameTooltip.lines)
+    mark:GetScript("OnLeave")(mark)
+    assert.is_false(GameTooltip.shown)
   end)
 
   it("ignores an older copy loaded after a newer one", function()
