@@ -1,6 +1,6 @@
 namespace Corvid;
 
-public interface IScreenSource
+public interface ICaptureSource
 {
     bool TryGetClient(out PixelRect client);
 

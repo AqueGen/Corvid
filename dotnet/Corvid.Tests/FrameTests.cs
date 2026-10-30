@@ -152,4 +152,22 @@ public class FrameTests
         Assert.Throws<ArgumentException>(() =>
             FrameWriter.Write(new byte[8], 0, [(1, key, [new Message(0, new byte[260])])]));
     }
+
+    [Fact]
+    public void WriteThrowsForBodyOverU16()
+    {
+        var key = ChannelKey.Generate();
+        var ex = Assert.Throws<ArgumentException>(() =>
+            FrameWriter.Write(new byte[8], 0, [(1, key, [new Message(0, new byte[65536])])]));
+        Assert.Contains("65535", ex.Message);
+    }
+
+    [Fact]
+    public void WriteThrowsForDuplicateChannel()
+    {
+        var key = ChannelKey.Generate();
+        var ex = Assert.Throws<ArgumentException>(() =>
+            FrameWriter.Write(new byte[8], 0, [(1, key, [new Message(0, [1])]), (1, key, [new Message(0, [2])])]));
+        Assert.Contains("Channel 1", ex.Message);
+    }
 }

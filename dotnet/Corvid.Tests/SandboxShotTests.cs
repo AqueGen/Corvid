@@ -4,6 +4,17 @@ using System.Windows.Media.Imaging;
 
 namespace Corvid.Tests;
 
+public sealed class SandboxShotFactAttribute : FactAttribute
+{
+    public SandboxShotFactAttribute()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CORVID_SANDBOX_SHOT")))
+        {
+            Skip = "CORVID_SANDBOX_SHOT is not set.";
+        }
+    }
+}
+
 public class SandboxShotTests
 {
     const string KeyHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -17,11 +28,10 @@ public class SandboxShotTests
         return new Bgra(pixels, bgra.PixelWidth, bgra.PixelHeight);
     }
 
-    [Fact]
+    [SandboxShotFact]
     public void RenderedMarkOpensWithTheTestKey()
     {
-        var path = Environment.GetEnvironmentVariable("CORVID_SANDBOX_SHOT");
-        if (string.IsNullOrEmpty(path)) return;
+        var path = Environment.GetEnvironmentVariable("CORVID_SANDBOX_SHOT")!;
 
         var found = QrPicture.Decode(Load(path));
 

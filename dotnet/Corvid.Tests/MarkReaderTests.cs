@@ -8,12 +8,12 @@ public class MarkReaderTests
     const int W = 1280;
     const int H = 720;
 
-    sealed class FakeSource(int originX, int originY) : IScreenSource
+    sealed class FakeSource(int originX, int originY) : ICaptureSource
     {
         public int OriginX { get; set; } = originX;
         public bool NullCapture { get; set; }
         public bool ThrowOnCapture { get; set; }
-        public Bgra Screen { get; set; } = Blank();
+        public Bgra Image { get; set; } = Blank();
         public bool HasClient { get; set; } = true;
         public List<PixelRect> Captures { get; } = [];
 
@@ -30,7 +30,7 @@ public class MarkReaderTests
             if (NullCapture) return null;
             var pixels = new byte[rect.Width * rect.Height * 4];
             for (var y = 0; y < rect.Height; y++)
-                Array.Copy(Screen.Pixels, ((rect.Y - originY + y) * W + rect.X - OriginX) * 4, pixels, y * rect.Width * 4, rect.Width * 4);
+                Array.Copy(Image.Pixels, ((rect.Y - originY + y) * W + rect.X - OriginX) * 4, pixels, y * rect.Width * 4, rect.Width * 4);
             return new Bgra(pixels, rect.Width, rect.Height);
         }
     }
@@ -42,10 +42,10 @@ public class MarkReaderTests
         return new Bgra(pixels, W, H);
     }
 
-    static void Paste(Bgra screen, Bgra picture, int x, int y)
+    static void Paste(Bgra image, Bgra picture, int x, int y)
     {
         for (var row = 0; row < picture.Height; row++)
-            Array.Copy(picture.Pixels, row * picture.Width * 4, screen.Pixels, ((y + row) * W + x) * 4, picture.Width * 4);
+            Array.Copy(picture.Pixels, row * picture.Width * 4, image.Pixels, ((y + row) * W + x) * 4, picture.Width * 4);
     }
 
     static Bgra Mark(uint counter)
@@ -73,7 +73,7 @@ public class MarkReaderTests
     public void FirstStepSearchesThenLockedStepReadsTheCrop()
     {
         var source = new FakeSource(100, 50);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
 
         var (read, _) = reader.Step(0);
@@ -87,7 +87,7 @@ public class MarkReaderTests
         Assert.InRange(read.Points.BottomLeft.Y, 314, 316);
         Assert.Equal(new PixelRect(100, 50, W, H), source.Captures[0]);
 
-        Paste(source.Screen, Mark(2), 300, 200);
+        Paste(source.Image, Mark(2), 300, 200);
         var (next, delay) = reader.Step(100);
 
         Assert.Equal(2u, next!.Frame.Counter);
@@ -102,9 +102,9 @@ public class MarkReaderTests
     public void ForeignCodeIsIgnored()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Foreign(), 100, 100);
-        Paste(source.Screen, Mark(1), 300, 200);
-        Paste(source.Screen, Foreign(), 700, 400);
+        Paste(source.Image, Foreign(), 100, 100);
+        Paste(source.Image, Mark(1), 300, 200);
+        Paste(source.Image, Foreign(), 700, 400);
 
         var (read, _) = Reader(source).Step(0);
 
@@ -117,7 +117,7 @@ public class MarkReaderTests
     public void OnlyForeignCodeLeavesTheReaderSearching()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Foreign(), 100, 100);
+        Paste(source.Image, Foreign(), 100, 100);
         var reader = Reader(source);
 
         var (read, delay) = reader.Step(0);
@@ -132,12 +132,12 @@ public class MarkReaderTests
     public void LockIsLostAfterLockLostMsAndOldRectIsProbed()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
         Assert.NotNull(reader.Step(0).Read);
         var locked = source.Captures.Count;
 
-        source.Screen = Blank();
+        source.Image = Blank();
         for (var t = 100; t <= 1400; t += 100) Assert.Null(reader.Step(t).Read);
         Assert.True(reader.Locked);
 
@@ -150,7 +150,7 @@ public class MarkReaderTests
         var probes = source.Captures.Count(r => r == oldRect);
         Assert.Equal(3, probes);
 
-        Paste(source.Screen, Mark(7), 300, 200);
+        Paste(source.Image, Mark(7), 300, 200);
         var relocked = reader.Step(3500).Read;
         Assert.Equal(7u, relocked!.Frame.Counter);
         Assert.True(reader.Locked);
@@ -161,7 +161,7 @@ public class MarkReaderTests
     public void IdenticalCaptureSkipsDecoding()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
         reader.Step(0);
         var first = reader.Step(100).Read;
@@ -172,7 +172,7 @@ public class MarkReaderTests
         Assert.Same(first, again);
         Assert.Equal(decodes, reader.DecodeCount);
 
-        Paste(source.Screen, Mark(2), 300, 200);
+        Paste(source.Image, Mark(2), 300, 200);
         Assert.Equal(2u, reader.Step(300).Read!.Frame.Counter);
         Assert.Equal(decodes + 1, reader.DecodeCount);
     }
@@ -193,14 +193,14 @@ public class MarkReaderTests
     public void MovedMarkIsFoundBySearchEvenWhenSearchDelayExceedsProbeInterval()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = SlowReader(source, 2000);
         Assert.NotNull(reader.Step(0).Read);
 
-        source.Screen = Blank();
+        source.Image = Blank();
         Assert.Null(reader.Step(2000).Read);
         Assert.False(reader.Locked);
-        Paste(source.Screen, Mark(2), 800, 400);
+        Paste(source.Image, Mark(2), 800, 400);
         MarkRead? found = null;
         for (var t = 4000; found is null && t <= 12000; t += 2000) found = reader.Step(t).Read;
 
@@ -213,7 +213,7 @@ public class MarkReaderTests
     public void ClientRectChangeClearsRememberedRect()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
         reader.Step(0);
         reader.Step(100);
@@ -233,7 +233,7 @@ public class MarkReaderTests
     public void ClientThatDisappearsAndReturnsIsSearchedAgain()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
         reader.Step(0);
         reader.Step(100);
@@ -255,11 +255,11 @@ public class MarkReaderTests
     public void NextDelayCoversLockedFailureAndProbeSteps()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = SlowReader(source, 5000);
         reader.Step(0);
 
-        source.Screen = Blank();
+        source.Image = Blank();
         Assert.Equal(100, reader.Step(100).NextDelayMs);
         for (var t = 200; t <= 1400; t += 100) reader.Step(t);
         Assert.Equal(500, reader.Step(1500).NextDelayMs);
@@ -271,7 +271,7 @@ public class MarkReaderTests
     public void FailedAndThrowingCaptureCountAsFailedReads()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
 
         source.NullCapture = true;
@@ -292,7 +292,7 @@ public class MarkReaderTests
     public void FrozenCaptureKeepsTheLockAndReturnsTheSameRead()
     {
         var source = new FakeSource(0, 0);
-        Paste(source.Screen, Mark(1), 300, 200);
+        Paste(source.Image, Mark(1), 300, 200);
         var reader = Reader(source);
         reader.Step(0);
         var first = reader.Step(100).Read;

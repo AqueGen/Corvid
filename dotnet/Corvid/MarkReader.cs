@@ -4,7 +4,7 @@ public sealed record MarkReaderOptions(int LockedEveryMs, Func<int, int> SearchD
 
 public sealed record MarkRead(Frame Frame, byte[] Bytes, MarkPoints Points);
 
-public sealed class MarkReader(IScreenSource source, MarkReaderOptions options)
+public sealed class MarkReader(ICaptureSource source, MarkReaderOptions options)
 {
     PixelRect? _locked;
     PixelRect? _lastLocked;

@@ -20,6 +20,15 @@ public static class FrameWriter
         session.CopyTo(nonce, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(nonce.AsSpan(8), counter);
 
+        if (segments.GroupBy(s => s.Channel).FirstOrDefault(g => g.Count() > 1) is { } duplicate)
+        {
+            throw new ArgumentException($"Channel {duplicate.Key} appears more than once.", nameof(segments));
+        }
+        if (segments.SelectMany(s => s.Messages).FirstOrDefault(m => m.Body.Length > ushort.MaxValue) is { } big)
+        {
+            throw new ArgumentException($"Message body is {big.Body.Length} bytes, limit is {ushort.MaxValue}.", nameof(segments));
+        }
+
         var frame = new List<byte> { 0xC7, 0x1D, 1, 0 };
         frame.AddRange(session);
         frame.AddRange(nonce.AsSpan(8).ToArray());
