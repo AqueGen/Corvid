@@ -140,6 +140,21 @@ describe("Frame", function()
     assert.are.equal("\0\1\0\1\3\3\0abc", data)
   end)
 
+  it("uses a given key id instead of deriving it", function()
+    local segs = { seg(1, KEY_A, { 0, "\1" }), seg(7, KEY_B, { 0, "\0" }) }
+    local plain = Frame.build(SESSION, 9, segs)
+    segs[1].keyId, segs[2].keyId = ChaCha20.keyId(KEY_A), ChaCha20.keyId(KEY_B)
+    local keyId, calls = ChaCha20.keyId, 0
+    ChaCha20.keyId = function(key)
+      calls = calls + 1
+      return keyId(key)
+    end
+    local cached = Frame.build(SESSION, 9, segs)
+    ChaCha20.keyId = keyId
+    assert.are.equal(0, calls)
+    assert.are.equal(plain, cached)
+  end)
+
   it("keeps the CRC for a segment without messages", function()
     local frame = Frame.build(SESSION, 5, { seg(1, KEY_A) })
     assert.are.equal(4, Bits.readU16le(frame, 20))

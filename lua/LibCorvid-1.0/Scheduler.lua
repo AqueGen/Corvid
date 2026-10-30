@@ -15,6 +15,7 @@ local IDLE_SECONDS = 1
 local BACKGROUND_SECONDS = 0.5
 local MESSAGE_OVERHEAD = 3
 local STATUS_BYTES = 32
+local PENDING_CAP = 64
 
 function Scheduler.new()
   return setmetatable({
@@ -28,9 +29,9 @@ function Scheduler.new()
   }, Scheduler)
 end
 
-function Scheduler:Register(channel, key)
+function Scheduler:Register(channel, key, keyId)
   if self.channels[channel] then return nil, "channel taken" end
-  self.channels[channel] = { key = key, status = "", background = {}, bgIdx = 1 }
+  self.channels[channel] = { key = key, keyId = keyId, status = "", background = {}, bgIdx = 1 }
   self.order[#self.order + 1] = channel
   table.sort(self.order)
   self.statusVersion = self.statusVersion + 1
@@ -38,7 +39,7 @@ function Scheduler:Register(channel, key)
 end
 
 function Scheduler:SetStatus(channel, body)
-  if not self.channels[channel] or #body > STATUS_BYTES then return false end
+  if not self.channels[channel] or type(body) ~= "string" or #body > STATUS_BYTES then return false end
   self.channels[channel].status = body
   self.statusVersion = self.statusVersion + 1
   return true
@@ -54,10 +55,15 @@ local function fits(m, free)
   return MESSAGE_OVERHEAD + #m.body <= free
 end
 
-function Scheduler:Send(channel, class, type, body, replaceKey)
+local function valid(msgType, body)
+  return type(msgType) == "number" and msgType % 1 == 0 and msgType >= 1 and msgType <= 255 and type(body) == "string"
+end
+
+function Scheduler:Send(channel, class, msgType, body, replaceKey)
   local queue = self.queues[class]
-  local message = { channel = channel, type = type, body = body, replaceKey = replaceKey }
-  if not queue or not self.channels[channel] or not fits(message, self:statusFree()) then return false end
+  if not queue or not self.channels[channel] or not valid(msgType, body) then return false end
+  local message = { channel = channel, type = msgType, body = body, replaceKey = replaceKey }
+  if not fits(message, self:statusFree()) then return false end
   if class == "realtime" and not fits(message, REALTIME_BYTES) then return false end
   if replaceKey then
     for _, q in pairs(self.queues) do
@@ -74,17 +80,26 @@ function Scheduler:Send(channel, class, type, body, replaceKey)
     end
   end
   queue[#queue + 1] = message
+  local oldest, n = nil, 0
+  for i, m in ipairs(queue) do
+    if m.channel == channel and not m.inflight then oldest, n = oldest or i, n + 1 end
+  end
+  if n > PENDING_CAP then
+    table.remove(queue, oldest)
+    self.dropped = self.dropped + 1
+  end
   return true
 end
 
 function Scheduler:SetBackground(channel, list)
   local ch = self.channels[channel]
-  if not ch then return false end
-  local free = self:statusFree() - REALTIME_BYTES
-  for _, m in ipairs(list) do
-    if not fits(m, free) then return false end
+  if not ch or type(list) ~= "table" then return false end
+  local free, copy = self:statusFree(), {}
+  for i, m in ipairs(list) do
+    if type(m) ~= "table" or not valid(m.type, m.body) or not fits(m, free) then return false end
+    copy[i] = { type = m.type, body = m.body }
   end
-  ch.background, ch.bgIdx = list, 1
+  ch.background, ch.bgIdx = copy, 1
   return true
 end
 
@@ -93,28 +108,29 @@ local function release(messages)
 end
 
 function Scheduler:backgroundCursor()
-  local idx = {}
-  for _, channel in ipairs(self.order) do idx[channel] = self.channels[channel].bgIdx end
-  local total = 0
-  for _, channel in ipairs(self.order) do total = total + #self.channels[channel].background end
-  return { next = self.bgNext, idx = idx, left = total }
+  local idx, used = {}, {}
+  for _, channel in ipairs(self.order) do idx[channel], used[channel] = self.channels[channel].bgIdx, 0 end
+  return { next = self.bgNext, idx = idx, used = used }
 end
 
-function Scheduler:peekBackground(cursor)
-  if cursor.left == 0 then return nil end
+-- an item without room waits at its channel's head; other channels' items still go out
+function Scheduler:peekBackground(cursor, room)
   local n = #self.order
   for k = 0, n - 1 do
     local pos = (cursor.next - 1 + k) % n + 1
     local channel = self.order[pos]
     local list = self.channels[channel].background
-    if #list > 0 then return channel, list[(cursor.idx[channel] - 1) % #list + 1], pos end
+    if #list > cursor.used[channel] then
+      local m = list[(cursor.idx[channel] - 1) % #list + 1]
+      if fits(m, room) then return channel, m, pos end
+    end
   end
 end
 
 local function advance(cursor, channel, pos, n)
   cursor.idx[channel] = cursor.idx[channel] + 1
+  cursor.used[channel] = cursor.used[channel] + 1
   cursor.next = pos % n + 1
-  cursor.left = cursor.left - 1
 end
 
 function Scheduler:dropUnfit(free)
@@ -128,7 +144,7 @@ function Scheduler:dropUnfit(free)
   for _, ch in pairs(self.channels) do
     local kept = {}
     for _, m in ipairs(ch.background) do
-      if fits(m, free - REALTIME_BYTES) then kept[#kept + 1] = m else self.dropped = self.dropped + 1 end
+      if fits(m, free) then kept[#kept + 1] = m else self.dropped = self.dropped + 1 end
     end
     if #kept < #ch.background then ch.background = kept end
   end
@@ -162,8 +178,8 @@ function Scheduler:Compose(now)
   local bgShown = false
   local function background(limit)
     while limit > 0 do
-      local channel, m, pos = self:peekBackground(cursor)
-      if not m or MESSAGE_OVERHEAD + #m.body > left then return end
+      local channel, m, pos = self:peekBackground(cursor, left)
+      if not m then return end
       left = left - MESSAGE_OVERHEAD - #m.body
       local list = picked[channel].background
       list[#list + 1] = m
@@ -185,7 +201,7 @@ function Scheduler:Compose(now)
     for _, class in ipairs({ "realtime", "normal", "background" }) do
       for _, m in ipairs(p[class]) do messages[#messages + 1] = { type = m.type, body = m.body } end
     end
-    plan[i] = { channel = channel, key = ch.key, messages = messages }
+    plan[i] = { channel = channel, key = ch.key, keyId = ch.keyId, messages = messages }
   end
   self.composed = {
     messages = taken, cursor = cursor, background = bgShown, statusVersion = self.statusVersion, protected = self.wasCut,

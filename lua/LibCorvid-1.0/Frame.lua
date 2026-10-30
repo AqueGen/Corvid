@@ -45,7 +45,7 @@ function Frame.build(session8, counter, segments)
     end
     local plain = concat(parts)
     plain = plain .. Bits.u32le(Crc32.compute(plain))
-    out[#out + 1] = char(seg.channel, ChaCha20.keyId(seg.key)) .. Bits.u16le(#plain)
+    out[#out + 1] = char(seg.channel, seg.keyId or ChaCha20.keyId(seg.key)) .. Bits.u16le(#plain)
     out[#out + 1] = ChaCha20.xor(seg.key, nonce, 0, plain)
   end
   local frame = concat(out)

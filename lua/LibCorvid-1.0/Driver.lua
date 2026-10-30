@@ -1,7 +1,7 @@
 local lib = LibStub("LibCorvid-1.0")
 if not lib.loading then return end
 
-local Bits, Frame, Qr10, Mark = lib.Bits, lib.Frame, lib.Qr10, lib.Mark
+local Bits, ChaCha20, Frame, Qr10, Mark = lib.Bits, lib.ChaCha20, lib.Frame, lib.Qr10, lib.Mark
 
 local BUDGET_MS = 1
 local SCALE_CHECK_SECONDS = 2
@@ -106,17 +106,16 @@ function lib:Register(channel, keyHex, db)
   if type(channel) ~= "number" or channel % 1 ~= 0 or channel < 0 or channel > 255 then return nil, "bad channel" end
   local key = type(keyHex) == "string" and #keyHex == KEY_HEX_LENGTH and Bits.hexToBytes(keyHex)
   if not key then return nil, "bad key" end
-  local ok, err = lib.scheduler:Register(channel, key)
+  local ok, err = lib.scheduler:Register(channel, key, ChaCha20.keyId(key))
   if not ok then return nil, err end
   lib.session = lib.session
     or Bits.u32le(GetServerTime()) .. Bits.u16le(math.random(0, 65535)) .. Bits.u16le(math.random(0, 65535))
   if db then
     lib.dbs[#lib.dbs + 1] = db
     local p = validPos(db.corvidPos) and db.corvidPos
-    if p and (not lib.pos.t or p.t > lib.pos.t) then
-      lib.pos = { x = p.x, y = p.y, t = p.t }
-    elseif lib.pos.t and (not p or p.t < lib.pos.t) then
-      db.corvidPos = { x = lib.pos.x, y = lib.pos.y, t = lib.pos.t }
+    if p and (not lib.pos.t or p.t > lib.pos.t) then lib.pos = { x = p.x, y = p.y, t = p.t } end
+    if lib.pos.t then
+      for _, d in ipairs(lib.dbs) do d.corvidPos = { x = lib.pos.x, y = lib.pos.y, t = lib.pos.t } end
     end
   end
   lib.wanted[channel] = true
@@ -130,8 +129,8 @@ function lib:SetStatus(channel, body)
   return lib.scheduler:SetStatus(channel, body)
 end
 
-function lib:Send(channel, class, type, body, replaceKey)
-  local ok = lib.scheduler:Send(channel, class, type, body, replaceKey)
+function lib:Send(channel, class, msgType, body, replaceKey)
+  local ok = lib.scheduler:Send(channel, class, msgType, body, replaceKey)
   -- one restart per job: a realtime flood would otherwise restart every job and starve the mark
   if ok and class == "realtime" and job and job.restartable then job, restarted = nil, true end
   return ok

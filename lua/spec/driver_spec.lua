@@ -301,6 +301,44 @@ describe("Driver", function()
     assert.are.same({ x = 300, y = -200, t = 20 }, empty.corvidPos)
   end)
 
+  it("refuses bad messages and keeps drawing", function()
+    local lib = fresh()
+    assert.is_true(lib:Register(1, KEY_HEX, {}))
+    assert.is_false(lib:Send(1, "normal", 256, "x"))
+    assert.is_false(lib:Send(1, "realtime", 0, "x"))
+    assert.is_false(lib:Send(1, "normal", 5, {}))
+    assert.is_false(lib:SetStatus(1, 7))
+    assert.is_false(lib:SetBackground(1, { { type = 1.5, body = "x" } }))
+    update(lib, 200)
+    assert.is_nil(lib.broken)
+    assert.is_true(lib:Stats().frames >= 2)
+  end)
+
+  it("writes an adopted newer position into every registered db", function()
+    local lib = fresh()
+    local older, newer = { corvidPos = { x = 100, y = -50, t = 10 } }, { corvidPos = { x = 300, y = -200, t = 20 } }
+    assert.is_true(lib:Register(1, KEY_HEX, older))
+    assert.is_true(lib:Register(2, KEY_HEX, newer))
+    assert.are.same({ x = 300, y = -200, t = 20 }, older.corvidPos)
+    assert.are.same({ x = 300, y = -200, t = 20 }, newer.corvidPos)
+  end)
+
+  it("derives each key id once at registration, not per frame", function()
+    local lib = fresh()
+    local keyId, calls = lib.ChaCha20.keyId, 0
+    lib.ChaCha20.keyId = function(key)
+      calls = calls + 1
+      return keyId(key)
+    end
+    assert.is_true(lib:Register(1, KEY_HEX, {}))
+    assert.is_true(lib:SetStatus(1, "\1"))
+    update(lib, 200)
+    lib.ChaCha20.keyId = keyId
+    assert.is_true(lib:Stats().frames >= 2)
+    assert.are.equal(1, calls)
+    assert.are.same(expectedMatrix(lib, lib:Stats().frames - 1, { { type = 0, body = "\1" } }), drawnMatrix(frontBuffer(lib)))
+  end)
+
   it("hides the mark while no channel is wanted", function()
     local lib = fresh()
     assert.is_true(lib:Register(1, KEY_HEX, {}))

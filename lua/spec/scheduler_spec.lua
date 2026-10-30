@@ -161,14 +161,120 @@ describe("Scheduler", function()
     s:Register(PS, "ps-key")
     s:Send(WCT, "normal", CHAT, "next")
     local plan = s:Compose(0)
-    assert.same({ { type = 0, body = "" }, { type = CHAT, body = "next" }, { type = PAGE, body = "small" } }, segment(plan, WCT).messages)
-    assert.equals(2, s.dropped)
+    assert.same({
+      { type = 0, body = "" }, { type = CHAT, body = "next" },
+      { type = PAGE, body = string.rep("p", 100) }, { type = PAGE, body = "small" },
+    }, segment(plan, WCT).messages)
+    assert.equals(1, s.dropped)
   end)
 
-  it("refuses a background item that cannot sit beside a full realtime share", function()
+  it("drops a background item once it no longer fits an otherwise-empty frame", function()
+    local s = Scheduler.new()
+    s:Register(WCT, "wct-key")
+    assert.is_true(s:SetBackground(WCT, { { type = PAGE, body = string.rep("p", 230) }, { type = PAGE, body = "small" } }))
+    s:Register(PS, "ps-key")
+    assert.same({ 0, PAGE }, types(s:Compose(0), WCT))
+    assert.equals(1, s.dropped)
+  end)
+
+  it("accepts a background item that fits an otherwise-empty frame", function()
     local s = new()
-    assert.is_false(s:SetBackground(PS, { { type = PAGE, body = string.rep("p", 93) } }))
-    assert.is_true(s:SetBackground(PS, { { type = PAGE, body = string.rep("p", 92) } }))
+    assert.is_false(s:SetBackground(PS, { { type = PAGE, body = string.rep("p", 227) } }))
+    assert.is_true(s:SetBackground(PS, { { type = PAGE, body = string.rep("p", 226) } }))
+  end)
+
+  it("keeps a page too big for a full realtime share and shows it when realtime is quiet", function()
+    local s = Scheduler.new()
+    s:Register(WCT, "wct-key")
+    assert.is_true(s:SetBackground(WCT, { { type = PAGE, body = string.rep("p", 100) } }))
+    s:Register(PS, "ps-key")
+    assert.is_true(s:SetStatus(PS, string.rep("s", 32)))
+    assert.is_true(s:Send(PS, "realtime", CAST, string.rep("x", 131)))
+    assert.same({ 0 }, types(s:Compose(0), WCT))
+    s:Shown(0, 0)
+    s:Tick(0.1, 5)
+    assert.equals(0, s.dropped)
+    assert.same({ 0, PAGE }, types(s:Compose(0.1), WCT))
+  end)
+
+  it("does not let a waiting big page hold back another channel's small pages", function()
+    local BIG = 6
+    local s = new()
+    assert.is_true(s:SetStatus(PS, string.rep("s", 32)))
+    assert.is_true(s:SetBackground(WCT, { { type = BIG, body = string.rep("p", 100) } }))
+    assert.is_true(s:SetBackground(PS, { { type = PAGE, body = string.rep("a", 30) }, { type = PAGE, body = string.rep("b", 30) } }))
+    local plans = run(s, 10, function(_, renders)
+      s:Send(PS, "realtime", CAST, string.format("%040d", renders))
+      s:Send(WCT, "normal", CHAT, string.rep("c", 20))
+    end)
+    assert.is_true(backgroundGap(plans, 10) <= 1)
+    for _, p in ipairs(plans) do
+      local seen = {}
+      for _, m in ipairs(segment(p.plan, PS).messages) do
+        if m.type == PAGE then
+          assert.is_nil(seen[m.body], "page twice in one frame")
+          seen[m.body] = true
+        end
+      end
+    end
+  end)
+
+  it("refuses a bad message type or body", function()
+    local s = new()
+    for _, t in ipairs({ 0, 256, -1, 1.5, "3", 0 / 0, math.huge }) do
+      assert.is_false(s:Send(WCT, "normal", t, "x"), tostring(t))
+    end
+    assert.is_false(s:Send(WCT, "normal", nil, "x"))
+    assert.is_false(s:Send(WCT, "normal", CHAT, 5))
+    assert.is_false(s:Send(WCT, "realtime", CHAT, nil))
+    assert.is_true(s:Send(WCT, "normal", 1, "x"))
+    assert.is_true(s:Send(WCT, "normal", 255, ""))
+  end)
+
+  it("refuses a status that is not a string", function()
+    local s = new()
+    assert.is_false(s:SetStatus(WCT, 5))
+    assert.is_false(s:SetStatus(WCT, nil))
+    assert.equals("", segment(s:Compose(0), WCT).messages[1].body)
+  end)
+
+  it("refuses a background list with a bad item and keeps the old list", function()
+    local s = new()
+    assert.is_true(s:SetBackground(WCT, { { type = PAGE, body = "ok" } }))
+    assert.is_false(s:SetBackground(WCT, "junk"))
+    assert.is_false(s:SetBackground(WCT, { "junk" }))
+    assert.is_false(s:SetBackground(WCT, { { type = 0, body = "x" } }))
+    assert.is_false(s:SetBackground(WCT, { { type = 256, body = "x" } }))
+    assert.is_false(s:SetBackground(WCT, { { type = PAGE, body = 7 } }))
+    assert.same({ 0, PAGE }, types(s:Compose(0), WCT))
+  end)
+
+  it("copies the background list so later edits by the caller change nothing", function()
+    local s = new()
+    local list = { { type = PAGE, body = "ok" } }
+    assert.is_true(s:SetBackground(WCT, list))
+    list[1].type = 0
+    list[2] = { type = PAGE, body = 9 }
+    assert.same({ { type = 0, body = "" }, { type = PAGE, body = "ok" } }, segment(s:Compose(0), WCT).messages)
+  end)
+
+  it("keeps at most 64 pending messages per channel and class and drops the oldest", function()
+    local s = new()
+    for i = 1, 66 do assert.is_true(s:Send(WCT, "normal", CHAT, tostring(i))) end
+    for i = 1, 64 do assert.is_true(s:Send(PS, "normal", CHAT, "p" .. i)) end
+    assert.equals(2, s.dropped)
+    assert.equals("3", segment(s:Compose(0), WCT).messages[2].body)
+    for i = 1, 65 do assert.is_true(s:Send(PS, "realtime", CAST, "r" .. i)) end
+    assert.equals(3, s.dropped)
+    local s2 = new()
+    for i = 1, 65 do s2:Send(PS, "realtime", CAST, "r" .. i) end
+    assert.equals("r2", segment(s2:Compose(0), PS).messages[2].body)
+  end)
+
+  it("carries the cached key id in the plan", function()
+    local s = Scheduler.new()
+    assert.is_true(s:Register(WCT, "wct-key", 42))
+    assert.equals(42, s:Compose(0)[1].keyId)
   end)
 
   it("delivers background at least once in every second under a cast and chat flood", function()
