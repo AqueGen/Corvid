@@ -313,7 +313,7 @@ describe("Scheduler", function()
     assert.equals(string.rep("s", 32), segment(s:Compose(0), WCT).messages[1].body)
   end)
 
-  it("puts background on screen at least once per second while chat fills every frame", function()
+  it("shows background at least once per second while chat fills every frame", function()
     local s = new()
     s:SetBackground(PS, { { type = PAGE, body = string.rep("a", 30) }, { type = PAGE, body = string.rep("b", 30) } })
     local plans = run(s, 10, function()
