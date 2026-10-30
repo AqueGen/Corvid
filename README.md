@@ -25,6 +25,7 @@ Lua library that encodes small binary frames, encrypts them with ChaCha20 (RFC 8
 | `lib:SetBackground(channel, list)` | `list` array of `{ type = 1..255, body = string }`; replaces the channel's list, `{}` clears it | `true`, or `false` when any item is invalid or too big (the old list stays) |
 | `lib:SetWanted(channel, wanted)` | boolean | nothing; the mark is shown while any registered channel is wanted |
 | `lib:SetLocked(locked)` | boolean; locked by default | nothing; a locked mark moves only by dragging with Alt held |
+| `lib:SetHint(channel, text)` | `text` string of at most 120 characters, or `nil` to clear | `true`, or `false` (unregistered channel, not a string, too long). Hovering the mark shows a tooltip: "Screen mark", "Alt + drag: move", then each channel's hint in channel order. A locked mark lets clicks through to the game and only reacts to hover |
 | `lib:ResetPosition()` | - | nothing |
 | `lib:ReferencePoints()` | - | `tlX, tlY, trX, trY, blX, blY` (finder centres, same coordinate space as the mark's `GetLeft`/`GetTop`), or `nil` before the mark has a position |
 | `lib:Stats()` | - | `{ frames, worstEncodeMs, lastGarbageKB, dropped }` |

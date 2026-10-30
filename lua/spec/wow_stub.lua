@@ -33,6 +33,8 @@ function Region:SetClampedToScreen(clamped) self.clamped = clamped end
 function Region:SetDontSavePosition(dont) self.dontSavePosition = dont end
 function Region:RegisterForDrag(button) self.dragButton = button end
 function Region:EnableMouse(enabled) self.mouse = enabled end
+function Region:SetMouseClickEnabled(enabled) self.mouseClick = enabled end
+function Region:SetMouseMotionEnabled(enabled) self.mouseMotion = enabled end
 function Region:StartMoving() self.moving = true end
 function Region:StopMovingOrSizing() self.moving = false end
 function Region:SetScript(name, fn) self.scripts[name] = fn end
@@ -60,6 +62,12 @@ function UIParent:GetTop() return 768 / self.scale end
 
 PixelUtil = { GetPixelToUIUnitFactor = function() return 768 / 1080 end }
 
+GameTooltip = { lines = {}, owner = nil, shown = false }
+function GameTooltip:SetOwner(owner, anchor) self.owner, self.anchor, self.lines = owner, anchor, {} end
+function GameTooltip:AddLine(text) self.lines[#self.lines + 1] = text end
+function GameTooltip:Show() self.shown = true end
+function GameTooltip:Hide() self.shown = false end
+
 function GetTime() return stub.time end
 function GetServerTime() return stub.serverTime end
 function IsAltKeyDown() return stub.alt end
@@ -77,6 +85,7 @@ end
 function stub.reset()
   stub.time, stub.ms, stub.msStep, stub.alt, stub.created = 0, 0, 0, nil, {}
   UIParent.scale = 1
+  GameTooltip.lines, GameTooltip.owner, GameTooltip.shown = {}, nil, false
   _G.CorvidMark = nil
 end
 
