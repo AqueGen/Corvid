@@ -57,7 +57,7 @@ The db table gets `db.corvidPos = { x, y, t }`. On Register the newest stored po
 
 ## .NET API
 
-- `ICaptureSource` - your capture backend: `TryGetClient(out PixelRect client)` returns `false` while the game window does not exist; `Capture(PixelRect rect)` returns a `Bgra` image or `null` (an exception counts as a failed read).
+- `ICaptureSource` - your capture backend: `TryGetClient(out PixelRect client)` returns `false` while the game window does not exist; `Capture(PixelRect rect)` returns a `Bgra` image or `null` (an exception counts as a failed read). `Capture` may return the same buffer on every call or a new one each time: the reader copies what it needs to compare against the next capture.
 - `MarkReader(source, new MarkReaderOptions(LockedEveryMs, SearchDelayMs, LockLostMs = 1500, RelockProbeMs = 500))` - call `Step(nowMs)` in a loop: it returns `(MarkRead? Read, int NextDelayMs)`; handle `Read` when it is not null, then wait `NextDelayMs`. While locked it polls every `LockedEveryMs`; while searching it waits `SearchDelayMs(failedSearches)`. While no client exists it polls at `SearchDelayMs(0)`.
 - `MarkRead` - `Frame`, the raw `Bytes`, and `Points` (finder centres relative to the client area). `frame.Open(channel, key)` returns `OpenResult(Status, Messages)` with `Status` one of `Ok`, `NoSegment`, `WrongKey`, `BadCrc`, `Malformed`.
 - `ChannelKey` - `Generate()`, `FromHex(hex)`, `ToHex()`, `KeyId`.

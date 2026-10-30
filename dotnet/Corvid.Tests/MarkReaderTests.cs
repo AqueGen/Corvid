@@ -28,11 +28,18 @@ public class MarkReaderTests
             Captures.Add(rect);
             if (ThrowOnCapture) throw new InvalidOperationException();
             if (NullCapture) return null;
-            var pixels = new byte[rect.Width * rect.Height * 4];
+            var length = rect.Width * rect.Height * 4;
+            var pixels = ReuseBuffer && _reused is { } held && held.Pixels.Length == length ? held.Pixels : new byte[length];
             for (var y = 0; y < rect.Height; y++)
                 Array.Copy(Image.Pixels, ((rect.Y - originY + y) * W + rect.X - OriginX) * 4, pixels, y * rect.Width * 4, rect.Width * 4);
-            return new Bgra(pixels, rect.Width, rect.Height);
+            var capture = ReferenceEquals(_reused?.Pixels, pixels) ? _reused : new Bgra(pixels, rect.Width, rect.Height);
+            if (ReuseBuffer) _reused = capture;
+            return capture;
         }
+
+        Bgra? _reused;
+        public bool ReuseBuffer { get; set; }
+        public byte[]? LastPixels => _reused?.Pixels;
     }
 
     static Bgra Blank()
@@ -175,6 +182,48 @@ public class MarkReaderTests
         Paste(source.Image, Mark(2), 300, 200);
         Assert.Equal(2u, reader.Step(300).Read!.Frame.Counter);
         Assert.Equal(decodes + 1, reader.DecodeCount);
+    }
+
+    [Fact]
+    public void SourceReusingOneBufferStillSeesChangesAndSkipsUnchanged()
+    {
+        var source = new FakeSource(0, 0) { ReuseBuffer = true };
+        Paste(source.Image, Mark(1), 300, 200);
+        var reader = Reader(source);
+        reader.Step(0);
+        var first = reader.Step(100).Read;
+        var buffer = source.LastPixels;
+        var decodes = reader.DecodeCount;
+
+        Assert.Same(first, reader.Step(200).Read);
+        Assert.Equal(decodes, reader.DecodeCount);
+        Assert.Same(buffer, source.LastPixels);
+
+        Paste(source.Image, Mark(2), 300, 200);
+        Assert.Equal(2u, reader.Step(300).Read!.Frame.Counter);
+        Assert.Equal(decodes + 1, reader.DecodeCount);
+        Assert.Same(buffer, source.LastPixels);
+
+        Paste(source.Image, Mark(3), 300, 200);
+        Assert.Equal(3u, reader.Step(400).Read!.Frame.Counter);
+    }
+
+    [Fact]
+    public void CaptureSizeChangeIsDecodedAgainWithReusedSource()
+    {
+        var source = new FakeSource(0, 0) { ReuseBuffer = true };
+        Paste(source.Image, Mark(1), 300, 200);
+        var reader = Reader(source);
+        reader.Step(0);
+        var fullFrame = source.LastPixels;
+        var decodes = reader.DecodeCount;
+
+        Assert.Equal(1u, reader.Step(100).Read!.Frame.Counter);
+
+        Assert.NotSame(fullFrame, source.LastPixels);
+        Assert.Equal(decodes + 1, reader.DecodeCount);
+        Paste(source.Image, Mark(2), 300, 200);
+        Assert.Equal(2u, reader.Step(200).Read!.Frame.Counter);
     }
 
     [Fact]
