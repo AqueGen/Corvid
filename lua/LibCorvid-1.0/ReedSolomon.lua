@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 local lib = LibStub("LibCorvid-1.0")
 if not lib.loading then return end
 

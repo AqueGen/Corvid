@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 _G.bit = require("bit")
 _G.strmatch = string.match
 require("spec.wow_stub")

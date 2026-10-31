@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 require("spec.helper")
 
 local Scheduler = LibStub("LibCorvid-1.0").Scheduler
