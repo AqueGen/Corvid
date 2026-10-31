@@ -1,3 +1,4 @@
+// Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 namespace Corvid.Tests;
 
 public class CryptoTests

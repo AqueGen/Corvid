@@ -1,3 +1,4 @@
+// Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;

@@ -1,21 +1,13 @@
-MIT License
+Copyright (c) 2026 AqueGen. All rights reserved.
 
-Copyright (c) 2026 AqueGen
+This software - the Corvid library for World of Warcraft addons (lua/LibCorvid-1.0), its probe addon, its .NET reader, the frame and mark format, the test fixtures and the documentation - is the property of the copyright holder.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+You may use it only as part of the copyright holder's own released apps and addons.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You may not copy, modify, redistribute, republish, sublicense or sell any part of it, or use any part of it in another project, without written permission from the copyright holder. This includes reproducing its source code, data or format in whole or in part, and using it as training material or as a reference for generated code.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copies obtained before 2026-10-31 were made available under the MIT License. That grant stands for those copies and is not withdrawn here; it does not extend to anything published afterwards.
+
+Third-party parts keep their own terms: lua/LibCorvid-1.0/LibStub.lua (public domain) and lua/spec/vendor (see the licence file there).
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.

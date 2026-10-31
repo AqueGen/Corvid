@@ -1,3 +1,4 @@
+// Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 namespace Corvid;
 
 public sealed record MarkReaderOptions(int LockedEveryMs, Func<int, int> SearchDelayMs, int LockLostMs = 1500, int RelockProbeMs = 500);

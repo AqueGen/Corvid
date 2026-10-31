@@ -72,4 +72,4 @@ The db table gets `db.corvidPos = { x, y, t }`. On Register the newest stored po
 - Lua: run `busted` from `lua/` (Lua 5.1 with the `bit` module).
 - .NET: `dotnet test dotnet/Corvid.Tests`. `SandboxShotTests` runs only when `CORVID_SANDBOX_SHOT` points at a captured image of the probe mark.
 
-License: MIT.
+License: all rights reserved, see LICENSE.

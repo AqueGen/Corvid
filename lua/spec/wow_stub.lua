@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 local stub = { time = 0, ms = 0, msStep = 0, serverTime = 1700000000, random = 0x1234, created = {} }
 
 local Region = {}
