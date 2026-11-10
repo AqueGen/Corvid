@@ -422,6 +422,68 @@ public sealed class AddonSyncTests : IDisposable
         Assert.Equal("newer a", File.ReadAllText(Path.Combine(Target, "a.lua")));
     }
 
+    private string Forever => Path.Combine(_dir, "_forever_");
+
+    private string[] Flavours => [Path.Combine(_dir, "_retail_"), Forever];
+
+    private AddonSyncResult? SyncAll(string? running) => AddonSync.SyncAll(Source, Flavours, running, () => Key, Layout);
+
+    private void MakeForever() => Directory.CreateDirectory(WowFolder.AddOns(Forever));
+
+    [Fact]
+    public void SyncAll_installs_into_every_folder()
+    {
+        MakeForever();
+
+        SyncAll(null);
+
+        foreach (var flavour in Flavours)
+        {
+            var target = Path.Combine(WowFolder.AddOns(flavour), "Link");
+            Assert.True(File.Exists(Path.Combine(target, "Link.toc")));
+            Assert.True(File.Exists(Path.Combine(target, AddonKeyFile.FileName)));
+        }
+    }
+
+    [Fact]
+    public void SyncAll_reports_the_running_folder()
+    {
+        MakeForever();
+        AddonSync.Sync(Source, WowFolder.AddOns(Forever), () => Key, Layout);
+        Write(Target, "1.1", ("a.lua", "new a"), ("b.lua", "b"));
+
+        Assert.Equal(AddonSyncResult.UpToDate, SyncAll(Forever + Path.DirectorySeparatorChar));
+
+        Directory.Delete(Target, true);
+        Assert.Equal(AddonSyncResult.Installed, SyncAll(Flavours[0]));
+    }
+
+    [Fact]
+    public void SyncAll_without_running_game_reports_failure_first()
+    {
+        MakeForever();
+        var broken = WowFolder.AddOns(Forever);
+        Directory.Delete(broken, true);
+        File.WriteAllText(broken, "");
+
+        Assert.Equal(AddonSyncResult.Failed, SyncAll(null));
+        Directory.Delete(Target, true);
+        Assert.Equal(AddonSyncResult.Installed, SyncAll(Flavours[0]));
+    }
+
+    [Fact]
+    public void SyncAll_without_running_game_prefers_installed_over_up_to_date()
+    {
+        MakeForever();
+        AddonSync.Sync(Source, WowFolder.AddOns(Forever), () => Key, Layout);
+        Assert.False(Directory.Exists(Target));
+
+        Assert.Equal(AddonSyncResult.Installed, SyncAll(null));
+    }
+
+    [Fact]
+    public void SyncAll_of_no_folders_is_null() => Assert.Null(AddonSync.SyncAll(Source, [], null, () => Key));
+
     [Fact]
     public void Is_current_follows_the_copy_rules()
     {
