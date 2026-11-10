@@ -62,8 +62,14 @@ public static class WowFolder
 
     private static bool IsNamed(string folder, string name) => string.Equals(Path.GetFileName(folder), name, StringComparison.OrdinalIgnoreCase);
 
-    private static string? ExeFolder(string? pick) =>
-        IsSafeLocal(pick) && Path.TrimEndingDirectorySeparator(pick) is var folder && File.Exists(Path.Combine(folder, "Wow.exe")) ? folder : null;
+    private static string? ExeFolder(string? pick)
+    {
+        if (!IsSafeLocal(pick)) return null;
+        var folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(pick));
+        if (IsNamed(folder, "AddOns") && Path.GetDirectoryName(folder) is { } interfaceDir && IsNamed(interfaceDir, "Interface")) folder = interfaceDir;
+        if (IsNamed(folder, "Interface") && Path.GetDirectoryName(folder) is { } parent) folder = parent;
+        return File.Exists(Path.Combine(folder, "Wow.exe")) ? folder : null;
+    }
 
     private static bool IsFlavourName(string folder) => Path.GetFileName(folder) is ['_', _, .., '_'];
 

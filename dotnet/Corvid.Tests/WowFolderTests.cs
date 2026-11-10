@@ -149,6 +149,17 @@ public sealed class WowFolderTests : IDisposable
         File.WriteAllText(Path.Combine(wow, "Wow.exe"), "");
 
         Assert.Equal([wow], WowFolder.Flavours(wow));
+        Assert.Equal([wow], WowFolder.Flavours(Path.Combine(wow, "Interface", "AddOns")));
+    }
+
+    [Fact]
+    public void Flavours_of_non_standard_folder_ignores_slash_style()
+    {
+        var wow = Path.Combine(_dir, "WoW");
+        Directory.CreateDirectory(wow);
+        File.WriteAllText(Path.Combine(wow, "Wow.exe"), "");
+
+        Assert.Equal([wow], WowFolder.Flavours(wow.Replace('\\', '/'), wow));
     }
 
     [Fact]

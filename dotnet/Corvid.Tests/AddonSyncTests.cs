@@ -450,6 +450,7 @@ public sealed class AddonSyncTests : IDisposable
     {
         MakeForever();
         AddonSync.Sync(Source, WowFolder.AddOns(Forever), () => Key, Layout);
+        Write(Target, "1.1", ("a.lua", "new a"), ("b.lua", "b"));
 
         Assert.Equal(AddonSyncResult.UpToDate, SyncAll(Forever + Path.DirectorySeparatorChar));
 
