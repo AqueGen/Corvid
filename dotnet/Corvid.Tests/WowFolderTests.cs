@@ -186,6 +186,9 @@ public sealed class WowFolderTests : IDisposable
     public void Flavours_of_nothing_is_empty() => Assert.Empty(WowFolder.Flavours(null, "", @"\\server\share\_retail_"));
 
     [Fact]
+    public void Flavours_of_pick_with_a_nul_char_is_empty() => Assert.Empty(WowFolder.Flavours("C:\\Wo\0W"));
+
+    [Fact]
     public void Addons_folder_sits_under_the_wow_folder() =>
         Assert.Equal(@"D:\Wow\_retail_\Interface\AddOns", WowFolder.AddOns(@"D:\Wow\_retail_"));
 }
