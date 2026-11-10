@@ -33,6 +33,28 @@ public static class WowFolder
         }
     }
 
+    public static IReadOnlyList<string> Flavours(params string?[] picks)
+    {
+        var folders = new List<string>();
+        foreach (var pick in picks)
+        {
+            if ((FromPicked(pick) ?? ExeFolder(pick)) is not { } folder) continue;
+            if (!IsFlavourName(folder) || Path.GetDirectoryName(folder) is not { } root)
+            {
+                folders.Add(folder);
+                continue;
+            }
+            try
+            {
+                folders.AddRange(Directory.EnumerateDirectories(root, "_*_").Where(f => IsFlavourName(f) && IsRetail(f)));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+            }
+        }
+        return folders.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     public static string? FromRunningGame(IEnumerable<string> names) => FromExePaths(GameProcess.ExePaths(names));
 
     public static string? FromExePaths(IEnumerable<string> exePaths) =>
@@ -40,6 +62,10 @@ public static class WowFolder
 
     private static bool IsNamed(string folder, string name) => string.Equals(Path.GetFileName(folder), name, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsFlavour(string folder) =>
-        Path.GetFileName(folder) is ['_', _, .., '_'] && IsRetail(folder);
+    private static string? ExeFolder(string? pick) =>
+        IsSafeLocal(pick) && Path.TrimEndingDirectorySeparator(pick) is var folder && File.Exists(Path.Combine(folder, "Wow.exe")) ? folder : null;
+
+    private static bool IsFlavourName(string folder) => Path.GetFileName(folder) is ['_', _, .., '_'];
+
+    private static bool IsFlavour(string folder) => IsFlavourName(folder) && IsRetail(folder);
 }

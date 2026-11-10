@@ -49,6 +49,18 @@ public static class AddonSync
         }
     }
 
+    public static AddonSyncResult? SyncAll(string bundledDir, IReadOnlyList<string> flavourFolders, string? runningFolder, Func<ChannelKey?> key, IReadOnlyCollection<string>? appFiles = null)
+    {
+        var results = flavourFolders.Select(f => (Folder: f, Result: Sync(bundledDir, WowFolder.AddOns(f), key, appFiles))).ToList();
+        if (results.Count == 0) return null;
+        var running = runningFolder is null ? null : Path.TrimEndingDirectorySeparator(runningFolder);
+        foreach (var (folder, result) in results)
+        {
+            if (running is not null && string.Equals(Path.TrimEndingDirectorySeparator(folder), running, StringComparison.OrdinalIgnoreCase)) return result;
+        }
+        return results.Max(r => r.Result);
+    }
+
     public static void Install(string bundledDir, string addOnsDir, ChannelKey? key, IReadOnlyCollection<string>? appFiles = null)
     {
         if (!Directory.Exists(bundledDir)) throw new DirectoryNotFoundException(bundledDir);

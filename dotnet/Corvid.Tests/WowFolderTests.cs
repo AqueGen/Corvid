@@ -122,6 +122,59 @@ public sealed class WowFolderTests : IDisposable
     }
 
     [Fact]
+    public void Flavours_lists_every_client_folder_under_the_root()
+    {
+        var retail = Flavour("_retail_");
+        var forever = Flavour("_forever_");
+        var root = Path.GetDirectoryName(retail)!;
+
+        foreach (var pick in new[] { root, retail, Path.Combine(forever, "Interface", "AddOns") })
+            Assert.Equal([forever, retail], WowFolder.Flavours(pick));
+    }
+
+    [Fact]
+    public void Flavours_skips_sibling_without_interface()
+    {
+        var retail = Flavour("_retail_");
+        Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(retail)!, "_cache_"));
+
+        Assert.Equal([retail], WowFolder.Flavours(retail));
+    }
+
+    [Fact]
+    public void Flavours_of_non_standard_folder_is_that_folder()
+    {
+        var wow = Path.Combine(_dir, "WoW");
+        Directory.CreateDirectory(Path.Combine(wow, "Interface", "AddOns"));
+        File.WriteAllText(Path.Combine(wow, "Wow.exe"), "");
+
+        Assert.Equal([wow], WowFolder.Flavours(wow));
+    }
+
+    [Fact]
+    public void Flavours_of_folder_with_only_interface_is_empty()
+    {
+        var random = Path.Combine(_dir, "Documents");
+        Directory.CreateDirectory(Path.Combine(random, "Interface", "AddOns"));
+
+        Assert.Empty(WowFolder.Flavours(random));
+    }
+
+    [Fact]
+    public void Flavours_unions_two_roots()
+    {
+        var retail = Path.Combine(_dir, "A", "_retail_");
+        var forever = Path.Combine(_dir, "B", "_forever_");
+        Directory.CreateDirectory(Path.Combine(retail, "Interface", "AddOns"));
+        Directory.CreateDirectory(Path.Combine(forever, "Interface", "AddOns"));
+
+        Assert.Equal(2, WowFolder.Flavours(retail, forever, retail).Count);
+    }
+
+    [Fact]
+    public void Flavours_of_nothing_is_empty() => Assert.Empty(WowFolder.Flavours(null, "", @"\\server\share\_retail_"));
+
+    [Fact]
     public void Addons_folder_sits_under_the_wow_folder() =>
         Assert.Equal(@"D:\Wow\_retail_\Interface\AddOns", WowFolder.AddOns(@"D:\Wow\_retail_"));
 }
