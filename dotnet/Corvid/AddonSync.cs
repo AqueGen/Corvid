@@ -58,8 +58,11 @@ public static class AddonSync
         {
             if (running is not null && string.Equals(Path.TrimEndingDirectorySeparator(folder), running, StringComparison.OrdinalIgnoreCase)) return result;
         }
-        return results.Max(r => r.Result);
+        return results.Select(r => r.Result).MaxBy(Importance);
     }
+
+    private static int Importance(AddonSyncResult result) => Array.IndexOf(
+        [AddonSyncResult.UpToDate, AddonSyncResult.Synced, AddonSyncResult.Updated, AddonSyncResult.Installed, AddonSyncResult.UpdatedFiles, AddonSyncResult.Failed], result);
 
     public static void Install(string bundledDir, string addOnsDir, ChannelKey? key, IReadOnlyCollection<string>? appFiles = null)
     {

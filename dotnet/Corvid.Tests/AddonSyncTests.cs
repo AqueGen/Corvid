@@ -472,6 +472,16 @@ public sealed class AddonSyncTests : IDisposable
     }
 
     [Fact]
+    public void SyncAll_without_running_game_prefers_installed_over_up_to_date()
+    {
+        MakeForever();
+        AddonSync.Sync(Source, WowFolder.AddOns(Forever), () => Key, Layout);
+        Assert.False(Directory.Exists(Target));
+
+        Assert.Equal(AddonSyncResult.Installed, SyncAll(null));
+    }
+
+    [Fact]
     public void SyncAll_of_no_folders_is_null() => Assert.Null(AddonSync.SyncAll(Source, [], null, () => Key));
 
     [Fact]

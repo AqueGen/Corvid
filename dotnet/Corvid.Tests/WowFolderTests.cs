@@ -133,6 +133,18 @@ public sealed class WowFolderTests : IDisposable
     }
 
     [Fact]
+    public void Flavours_skips_classic_clients()
+    {
+        var retail = Flavour("_retail_");
+        var classic = Flavour("_classic_");
+        Flavour("_classic_era_");
+        Flavour("_anniversary_");
+
+        Assert.Equal([retail], WowFolder.Flavours(Path.GetDirectoryName(retail)!));
+        Assert.Equal([retail], WowFolder.Flavours(classic));
+    }
+
+    [Fact]
     public void Flavours_skips_sibling_without_interface()
     {
         var retail = Flavour("_retail_");

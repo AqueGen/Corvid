@@ -46,7 +46,7 @@ public static class WowFolder
             }
             try
             {
-                folders.AddRange(Directory.EnumerateDirectories(root, "_*_").Where(f => IsFlavourName(f) && IsRetail(f)));
+                folders.AddRange(Directory.EnumerateDirectories(root, "_*_").Where(f => IsClientName(f) && IsRetail(f)));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
             {
@@ -79,6 +79,9 @@ public static class WowFolder
     }
 
     private static bool IsFlavourName(string folder) => Path.GetFileName(folder) is ['_', _, .., '_'];
+
+    private static bool IsClientName(string folder) =>
+        new[] { "_retail_", "_ptr_", "_beta_", "_forever_" }.Contains(Path.GetFileName(folder), StringComparer.OrdinalIgnoreCase);
 
     private static bool IsFlavour(string folder) => IsFlavourName(folder) && IsRetail(folder);
 }
