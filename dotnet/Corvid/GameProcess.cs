@@ -15,9 +15,23 @@ public static class GameProcess
         return processes.Length > 0;
     });
 
+    public static int[] Ids(IEnumerable<string> names)
+    {
+        var ids = new List<int>();
+        foreach (var name in names)
+        {
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                using (process) ids.Add(process.Id);
+            }
+        }
+        ids.Sort();
+        return [.. ids];
+    }
+
     public static List<string> ExePaths(IEnumerable<string> names)
     {
-        var paths = new List<string>();
+        var found = new List<(DateTime Start, string Path)>();
         foreach (var name in names)
         {
             foreach (var process in Process.GetProcessesByName(name))
@@ -26,7 +40,7 @@ public static class GameProcess
                 {
                     try
                     {
-                        if (process.MainModule?.FileName is { } path) paths.Add(path);
+                        if (process.MainModule?.FileName is { } path) found.Add((process.StartTime, path));
                     }
                     catch (Exception e) when (e is Win32Exception or InvalidOperationException)
                     {
@@ -34,7 +48,7 @@ public static class GameProcess
                 }
             }
         }
-        return paths;
+        return found.OrderByDescending(f => f.Start).Select(f => f.Path).ToList();
     }
 
     public static string? ProcessName(int pid)

@@ -47,4 +47,20 @@ public sealed class GameProcessTests
 
     [Fact]
     public void Missing_process_is_not_running() => Assert.False(GameProcess.IsRunning(["corvid-no-such-process-" + Guid.NewGuid().ToString("N")]));
+
+    [Fact]
+    public void Ids_include_own_process_and_come_sorted()
+    {
+        var ids = GameProcess.Ids([System.Diagnostics.Process.GetCurrentProcess().ProcessName]);
+
+        Assert.Contains(Environment.ProcessId, ids);
+        Assert.Equal(ids.Order(), ids);
+    }
+
+    [Fact]
+    public void Missing_process_has_no_ids() => Assert.Empty(GameProcess.Ids(["corvid-no-such-process-" + Guid.NewGuid().ToString("N")]));
+
+    [Fact]
+    public void Own_exe_path_is_found() =>
+        Assert.Contains(Environment.ProcessPath!, GameProcess.ExePaths([System.Diagnostics.Process.GetCurrentProcess().ProcessName]), StringComparer.OrdinalIgnoreCase);
 }
