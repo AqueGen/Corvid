@@ -58,7 +58,8 @@ public static class AddonSync
         {
             if (running is not null && string.Equals(Path.TrimEndingDirectorySeparator(folder), running, StringComparison.OrdinalIgnoreCase)) return result;
         }
-        return results.Select(r => r.Result).MaxBy(Importance);
+        var worst = results.Select(r => r.Result).MaxBy(Importance);
+        return running is not null && worst is AddonSyncResult.Installed or AddonSyncResult.Updated or AddonSyncResult.UpdatedFiles ? AddonSyncResult.Synced : worst;
     }
 
     private static int Importance(AddonSyncResult result) => Array.IndexOf(
