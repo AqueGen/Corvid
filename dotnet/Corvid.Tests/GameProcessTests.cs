@@ -58,6 +58,16 @@ public sealed class GameProcessTests
     }
 
     [Fact]
+    public void Newest_process_path_comes_first()
+    {
+        var at = new DateTime(2026, 11, 15, 16, 0, 0);
+
+        var paths = GameProcess.NewestFirst([(at, @"G:\WoW\_retail_\Wow.exe"), (at.AddHours(2), @"G:\WoW\_forever_\Wow.exe"), (at.AddHours(1), @"G:\WoW\_ptr_\WowT.exe")]);
+
+        Assert.Equal([@"G:\WoW\_forever_\Wow.exe", @"G:\WoW\_ptr_\WowT.exe", @"G:\WoW\_retail_\Wow.exe"], paths);
+    }
+
+    [Fact]
     public void Missing_process_has_no_ids() => Assert.Empty(GameProcess.Ids(["corvid-no-such-process-" + Guid.NewGuid().ToString("N")]));
 
     [Fact]

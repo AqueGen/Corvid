@@ -48,8 +48,11 @@ public static class GameProcess
                 }
             }
         }
-        return found.OrderByDescending(f => f.Start).Select(f => f.Path).ToList();
+        return NewestFirst(found);
     }
+
+    internal static List<string> NewestFirst(IEnumerable<(DateTime Start, string Path)> found) =>
+        found.OrderByDescending(f => f.Start).Select(f => f.Path).ToList();
 
     public static string? ProcessName(int pid)
     {
