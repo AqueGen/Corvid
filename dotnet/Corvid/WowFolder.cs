@@ -61,7 +61,7 @@ public static class WowFolder
         var folder = Path.TrimEndingDirectorySeparator(path);
         if (IsNamed(folder, "AddOns") && Path.GetDirectoryName(folder) is { } interfaceDir && IsNamed(interfaceDir, "Interface")) folder = interfaceDir;
         if (IsNamed(folder, "Interface") && Path.GetDirectoryName(folder) is { } client) folder = client;
-        if (IsFlavourName(folder) && Path.GetDirectoryName(folder) is { } root) folder = root;
+        if (IsFlavourName(folder) && Path.GetDirectoryName(folder) is { } root && IsSafeLocal(root)) folder = root;
         return IsSafeLocal(folder) ? folder : null;
     }
 
@@ -70,16 +70,31 @@ public static class WowFolder
     public static IReadOnlyList<string> Clients(string? root)
     {
         if (!IsSafeLocal(root)) return [];
-        if (!IsFlavourName(root) && IsRetail(root)) return [root];
+        List<string> children;
         try
         {
-            return Directory.EnumerateDirectories(root, "_*_").Where(f => IsClientName(f) && IsRetail(f)).Order(StringComparer.OrdinalIgnoreCase).ToList();
+            children = Directory.EnumerateDirectories(root, "_*_").Where(f => IsClientName(f) && IsRetail(f)).Order(StringComparer.OrdinalIgnoreCase).ToList();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return [];
+            children = [];
         }
+        if (children.Count > 0) return children;
+        return IsRetail(root) && (IsFlavourName(root) || File.Exists(Path.Combine(root, "Wow.exe"))) ? [root] : [];
     }
+
+    public static IReadOnlyList<string> Clients(string? root, string? running)
+    {
+        var clients = Clients(root);
+        if (!IsRetail(running)) return clients;
+        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(running));
+        var underRoot = root is not null && string.Equals(parent, Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
+        if (underRoot && !IsClientName(running)) return clients;
+        return clients.Append(Path.TrimEndingDirectorySeparator(running)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public static bool IsClientNameSafe([NotNullWhen(true)] string? name) =>
+        !string.IsNullOrEmpty(name) && name is not ("." or "..") && name.IndexOfAny([.. Path.GetInvalidFileNameChars(), '\\', '/']) < 0;
 
     public static string ClientName(string folder) => Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)).ToLowerInvariant();
 

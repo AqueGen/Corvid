@@ -59,6 +59,53 @@ public sealed class WowFolderTests : IDisposable
     }
 
     [Fact]
+    public void Clients_ignore_a_stray_interface_in_the_root()
+    {
+        var retail = Flavour("_retail_");
+        var forever = Flavour("_forever_");
+        Directory.CreateDirectory(Path.Combine(Root, "Interface", "AddOns"));
+
+        Assert.Equal([forever, retail], WowFolder.Clients(Root));
+    }
+
+    [Fact]
+    public void Root_with_only_a_stray_interface_has_no_clients()
+    {
+        Directory.CreateDirectory(Path.Combine(Root, "Interface"));
+
+        Assert.Empty(WowFolder.Clients(Root));
+    }
+
+    [Fact]
+    public void Running_client_is_added_only_when_allowed_or_elsewhere()
+    {
+        var retail = Flavour("_retail_");
+        var classic = Flavour("_classic_");
+        var elsewhere = Path.Combine(_dir, "Other", "WoW");
+        Directory.CreateDirectory(Path.Combine(elsewhere, "Interface"));
+
+        Assert.Equal([retail], WowFolder.Clients(Root, classic));
+        Assert.Equal([elsewhere, retail], WowFolder.Clients(Root, elsewhere));
+        Assert.Equal([retail], WowFolder.Clients(null, retail));
+        Assert.Equal([retail], WowFolder.Clients(Root, null));
+    }
+
+    [Fact]
+    public void Client_folder_on_a_drive_root_stays_itself() => Assert.Equal(@"D:\_retail_", WowFolder.RootOf(@"D:\_retail_\Interface\AddOns"));
+
+    [Theory]
+    [InlineData("_retail_", true)]
+    [InlineData("wow", true)]
+    [InlineData("world of warcraft", true)]
+    [InlineData("..", false)]
+    [InlineData(".", false)]
+    [InlineData(@"..\x", false)]
+    [InlineData("a/b", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Client_names_are_one_safe_segment(string? name, bool expected) => Assert.Equal(expected, WowFolder.IsClientNameSafe(name));
+
+    [Fact]
     public void Clients_of_missing_root_is_empty() => Assert.Empty(WowFolder.Clients(Path.Combine(_dir, "missing")));
 
     [Theory]

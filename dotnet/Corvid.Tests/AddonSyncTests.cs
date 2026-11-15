@@ -482,6 +482,14 @@ public sealed class AddonSyncTests : IDisposable
     }
 
     [Fact]
+    public void SyncAll_with_the_running_client_left_out_reports_no_reload()
+    {
+        MakeForever();
+
+        Assert.Equal(AddonSyncResult.Synced, SyncAll(Path.Combine(_dir, "_ptr_")));
+    }
+
+    [Fact]
     public void SyncAll_of_no_folders_is_null() => Assert.Null(AddonSync.SyncAll(Source, [], null, () => Key));
 
     [Fact]
