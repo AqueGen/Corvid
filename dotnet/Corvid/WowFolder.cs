@@ -83,6 +83,15 @@ public static class WowFolder
 
     public static string ClientName(string folder) => Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)).ToLowerInvariant();
 
+    public static string ClientLabel(string folder) => ClientName(folder) switch
+    {
+        "_retail_" => "Retail",
+        "_forever_" => "Forever",
+        "_ptr_" => "PTR",
+        "_beta_" => "Beta",
+        _ => Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)),
+    };
+
     public static IReadOnlyList<string> Enabled(IEnumerable<string> clients, IReadOnlyCollection<string> disabled) =>
         clients.Where(c => !disabled.Contains(ClientName(c), StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
 

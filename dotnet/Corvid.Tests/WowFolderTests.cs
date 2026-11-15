@@ -61,6 +61,15 @@ public sealed class WowFolderTests : IDisposable
     [Fact]
     public void Clients_of_missing_root_is_empty() => Assert.Empty(WowFolder.Clients(Path.Combine(_dir, "missing")));
 
+    [Theory]
+    [InlineData(@"G:\Games\World of Warcraft\_retail_", "Retail")]
+    [InlineData(@"G:\Games\World of Warcraft\_forever_\", "Forever")]
+    [InlineData(@"D:\WoW\_PTR_", "PTR")]
+    [InlineData(@"D:\WoW\_beta_", "Beta")]
+    [InlineData(@"D:\WoW\_xptr_", "_xptr_")]
+    [InlineData(@"D:\Games\WoW", "WoW")]
+    public void Client_label_names_known_clients(string folder, string expected) => Assert.Equal(expected, WowFolder.ClientLabel(folder));
+
     [Fact]
     public void Client_name_is_the_lowercase_folder_name() => Assert.Equal("_forever_", WowFolder.ClientName(@"C:\Wow\_Forever_\"));
 
