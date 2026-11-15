@@ -14,6 +14,64 @@ public sealed class WowFolderTests : IDisposable
         return folder;
     }
 
+    private string Root => Path.Combine(_dir, "World of Warcraft");
+
+    [Theory]
+    [InlineData(@"C:\Wow\_retail_", @"C:\Wow")]
+    [InlineData(@"C:\Wow\_forever_\Interface\AddOns\", @"C:\Wow")]
+    [InlineData(@"C:\Wow\_retail_\Interface", @"C:\Wow")]
+    [InlineData(@"C:\Wow", @"C:\Wow")]
+    [InlineData(@"C:\Wow\", @"C:\Wow")]
+    [InlineData(@"Wow\_retail_", null)]
+    [InlineData(@"\\server\share\_retail_", null)]
+    [InlineData(null, null)]
+    public void RootOf_strips_client_interface_and_addons(string? path, string? expected) => Assert.Equal(expected, WowFolder.RootOf(path));
+
+    [Fact]
+    public void Root_needs_a_client()
+    {
+        Assert.Null(WowFolder.Root(_dir));
+        Flavour("_retail_");
+        Assert.Equal(Root, WowFolder.Root(Path.Combine(Root, "_retail_", "Interface", "AddOns")));
+        Assert.Equal(Root, WowFolder.Root(Root));
+    }
+
+    [Fact]
+    public void Clients_lists_allowed_clients_only()
+    {
+        var retail = Flavour("_retail_");
+        var forever = Flavour("_forever_");
+        Flavour("_classic_");
+        Directory.CreateDirectory(Path.Combine(Root, "_cache_"));
+
+        Assert.Equal([forever, retail], WowFolder.Clients(Root));
+    }
+
+    [Fact]
+    public void Clients_of_custom_install_is_itself()
+    {
+        var custom = Path.Combine(_dir, "WoW");
+        Directory.CreateDirectory(custom);
+        File.WriteAllText(Path.Combine(custom, "Wow.exe"), "");
+
+        Assert.Equal([custom], WowFolder.Clients(custom));
+        Assert.Equal(custom, WowFolder.Root(custom));
+    }
+
+    [Fact]
+    public void Clients_of_missing_root_is_empty() => Assert.Empty(WowFolder.Clients(Path.Combine(_dir, "missing")));
+
+    [Fact]
+    public void Client_name_is_the_lowercase_folder_name() => Assert.Equal("_forever_", WowFolder.ClientName(@"C:\Wow\_Forever_\"));
+
+    [Fact]
+    public void Enabled_drops_disabled_names()
+    {
+        string[] clients = [@"C:\Wow\_retail_", @"C:\Wow\_forever_", @"C:\Wow\_retail_"];
+
+        Assert.Equal([@"C:\Wow\_retail_"], WowFolder.Enabled(clients, ["_FOREVER_"]));
+    }
+
     [Fact]
     public void Retail_folder_needs_interface_or_wow_exe()
     {

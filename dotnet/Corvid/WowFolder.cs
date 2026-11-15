@@ -55,6 +55,37 @@ public static class WowFolder
         return folders.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    public static string? RootOf(string? path)
+    {
+        if (!IsSafeLocal(path)) return null;
+        var folder = Path.TrimEndingDirectorySeparator(path);
+        if (IsNamed(folder, "AddOns") && Path.GetDirectoryName(folder) is { } interfaceDir && IsNamed(interfaceDir, "Interface")) folder = interfaceDir;
+        if (IsNamed(folder, "Interface") && Path.GetDirectoryName(folder) is { } client) folder = client;
+        if (IsFlavourName(folder) && Path.GetDirectoryName(folder) is { } root) folder = root;
+        return IsSafeLocal(folder) ? folder : null;
+    }
+
+    public static string? Root(string? picked) => RootOf(picked) is { } root && Clients(root).Count > 0 ? root : null;
+
+    public static IReadOnlyList<string> Clients(string? root)
+    {
+        if (!IsSafeLocal(root)) return [];
+        if (!IsFlavourName(root) && IsRetail(root)) return [root];
+        try
+        {
+            return Directory.EnumerateDirectories(root, "_*_").Where(f => IsClientName(f) && IsRetail(f)).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return [];
+        }
+    }
+
+    public static string ClientName(string folder) => Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)).ToLowerInvariant();
+
+    public static IReadOnlyList<string> Enabled(IEnumerable<string> clients, IReadOnlyCollection<string> disabled) =>
+        clients.Where(c => !disabled.Contains(ClientName(c), StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+
     public static string? FromRunningGame(IEnumerable<string> names) => FromExePaths(GameProcess.ExePaths(names));
 
     public static string? FromExePaths(IEnumerable<string> exePaths) =>
